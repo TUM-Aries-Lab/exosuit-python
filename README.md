@@ -51,5 +51,5 @@ if __name__ == "__main__":
 
 ## Program Usage
 ```bash
-uv run python -m change_me
+uv run python -m exosuit_python
 ```

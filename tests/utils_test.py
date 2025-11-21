@@ -3,8 +3,8 @@
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from change_me.config.definitions import LogLevel
-from change_me.utils import setup_logger
+from exosuit_python.definitions import LogLevel
+from exosuit_python.utils import setup_logger
 
 
 def test_logger_init() -> None:

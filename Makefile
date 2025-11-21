@@ -6,7 +6,7 @@ init:  # ENV SETUP
 	@echo "Environment initialized with uv."
 
 test:
-	uv run pytest --cov=src --cov-report=term-missing --no-cov-on-fail --cov-report=xml --cov-fail-under=10
+	uv run pytest --cov=src --cov-report=term-missing --no-cov-on-fail --cov-report=xml --cov-fail-under=90
 	rm .coverage
 
 lint:
@@ -40,8 +40,8 @@ deep-update:
 	uv update --all-groups
 
 docker:
-	docker build --no-cache -f Dockerfile -t change_me-smoke .
-	docker run --rm change_me-smoke
+	docker build --no-cache -f Dockerfile -t exosuit_python-smoke .
+	docker run --rm exosuit_python-smoke
 
 app:
-	uv run python -m change_me
+	uv run python -m exosuit_python
