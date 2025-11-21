@@ -1,22 +1,20 @@
 # template-python
-[![Coverage Status](https://coveralls.io/repos/github/TUM-Aries-Lab/template-python/badge.svg?branch=main)](https://coveralls.io/github/TUM-Aries-Lab/template-python?branch=main)
-![Docker Image CI](https://github.com/TUM-Aries-Lab/template-python/actions/workflows/ci.yml/badge.svg)
+[![Coverage Status](https://coveralls.io/repos/github/TUM-Aries-Lab/python-exosuit/badge.svg?branch=main)](https://coveralls.io/github/TUM-Aries-Lab/template-python?branch=main)
+![Docker Image CI](https://github.com/TUM-Aries-Lab/python-exosuit/actions/workflows/ci.yml/badge.svg)
 
 Simple README.md for a Python project template.
-
-Do ***NOT*** clone this repository. Please use it as a template instead. This readme is just here to serve as a template for you to get started faster.
 
 ## Install
 To install the library run:
 
 ```bash
-uv install <your-package-name>
+uv install python-exosuit
 ```
 
 OR
 
 ```bash
-uv install git+https://github.com/TUM-Aries-Lab/<your-package-name>.git@<specific-tag>
+uv install git+https://github.com/TUM-Aries-Lab/python-exosuit.git@<specific-tag>
 ```
 
 ## Development
@@ -37,15 +35,11 @@ It's super easy to publish your own packages on PyPI. To build and publish this 
 uv build
 uv publish  # make sure your version in pyproject.toml is updated
 ```
-The package can then be found at: https://pypi.org/project/change-me
+The package can then be found at: https://pypi.org/project/python-exosuit
 
 ## Module Usage
 ```python
 """Basic docstring for my module."""
-
-from loguru import logger
-
-from change_me.config import definitions
 
 def main() -> None:
     """Run a simple demonstration."""
