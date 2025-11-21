@@ -25,8 +25,6 @@ def create_timestamped_filepath(suffix: str, output_dir: Path, prefix: str) -> P
     """
     timestamp = datetime.now().strftime(DATE_FORMAT)
     filepath = output_dir / f"{prefix}_{timestamp}.{suffix}"
-    filepath.parent.mkdir(parents=True, exist_ok=True)  # create dirs if missing
-    filepath.touch(exist_ok=True)  # create empty file (don't overwrite)
     return filepath
 
 
@@ -34,7 +32,7 @@ def setup_logger(
     filename: str = DEFAULT_LOG_FILENAME,
     stderr_level: str = DEFAULT_LOG_LEVEL,
     log_level: str = DEFAULT_LOG_LEVEL,
-    log_dir: Path | None = None,
+    log_dir: Path = LOG_DIR,
 ) -> Path:
     """Configure the logger.
 
@@ -46,14 +44,12 @@ def setup_logger(
     """
     logger.remove()
 
-    if log_dir is None:
-        log_filepath = LOG_DIR
-    else:
-        log_filepath = log_dir
-    filepath_with_time = create_timestamped_filepath(
-        output_dir=log_filepath, prefix=filename, suffix="log"
+    filepath = create_timestamped_filepath(
+        output_dir=log_dir, prefix=filename, suffix="log"
     )
+    filepath.parent.mkdir(parents=True, exist_ok=True)  # create dirs if missing
+    filepath.touch(exist_ok=True)  # create empty file (don't overwrite)
     logger.add(sys.stderr, level=stderr_level)
-    logger.add(filepath_with_time, level=log_level, encoding=ENCODING, enqueue=True)
-    logger.info(f"Logging to '{filepath_with_time}'.")
-    return filepath_with_time
+    logger.add(filepath, level=log_level, encoding=ENCODING, enqueue=True)
+    logger.info(f"Logging to '{filepath}'.")
+    return filepath
