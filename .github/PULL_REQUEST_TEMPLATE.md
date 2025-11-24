@@ -1,25 +1,5 @@
 # Summary
 
-Provide a brief description of the change and the reasoning behind it.
-
----
-
-# Reviewers
-
-## Required Reviewers
-- @username1  
-- @username2  
-
-## Optional Reviewers
-- @username3  
-- @username4  
-
-(Feel free to add/remove as needed.)
-
----
-
-# What Changed?
-
 Describe the main changes in this PR:
 -
 -
@@ -61,12 +41,7 @@ Before requesting review, ensure:
 
 ---
 
-# Screenshots / Logs (optional)
-
-Attach outputs, plots, logs, or GIFs here.
-
----
-
 # Additional Notes
 
-Anything else reviewers should know?
+- Anything else reviewers should know?
+- Attach outputs, plots, logs, or GIFs here.
