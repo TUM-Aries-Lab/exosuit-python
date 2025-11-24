@@ -8,7 +8,7 @@ This repo is the main codebase to run the lower-limb exosuit on a single board c
 To install the library run:
 
 ```bash
-uv pip install python-exosuit
+uv pip install python-exosuit==latest
 ```
 OR
 ```bash

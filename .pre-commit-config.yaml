@@ -2,7 +2,7 @@ ci:
   skip: [pytest]
 
 default_language_version:
-  python: python3.12   # <-- FIXED (use your main project version)
+  python: python3.12
 
 repos:
 - repo: https://github.com/pre-commit/pre-commit-hooks
