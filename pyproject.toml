@@ -1,6 +1,6 @@
 [project]
 name = "exosuit-python"
-version = "0.0.1"
+version = "0.0.2"
 description = "Python-based lower limb exosuit"
 readme = "README.md"
 authors = [{ name = "Tsmorz", email = "tony.smoragiewicz@tum.de" }]
