@@ -19,7 +19,10 @@ def main(
     """
     setup_logger(log_level=log_level, stderr_level=stderr_level)
     logger.info("Hello, world!")
+
     logger.debug("This is Hannes")
+
+    logger.info("Haoqing Yang")
 
 
 if __name__ == "__main__":  # pragma: no cover
