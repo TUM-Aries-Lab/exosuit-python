@@ -2,8 +2,6 @@
 [![Coverage Status](https://coveralls.io/repos/github/TUM-Aries-Lab/template-python/badge.svg?branch=main)](https://coveralls.io/github/TUM-Aries-Lab/exosuit-python?branch=main)
 ![Docker Image CI](https://github.com/TUM-Aries-Lab/exosuit-python/actions/workflows/ci.yml/badge.svg)
 
-Walk through README with Haoqing.
-
 This repo is the main codebase to run the lower-limb exosuit on a single board computer like the Jetson Nano.
 
 ## Install
