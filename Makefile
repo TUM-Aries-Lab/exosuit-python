@@ -34,6 +34,7 @@ clean:
 
 update:
 	uv sync --upgrade --all-groups
+	uv run pre-commit autoupdate
 
 update-deep:
 	uv cache clean pypi
