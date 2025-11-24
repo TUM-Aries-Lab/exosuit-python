@@ -1,4 +1,4 @@
-# Contributing to This Project
+# Contributing Guidelines
 
 We welcome issues, bug reports, feature requests, and pull requests.
 
