@@ -33,11 +33,11 @@ clean:
 	find . -name "__pycache__" -exec rm -r {} +
 
 update:
-	uv update --all-groups
+	uv sync --upgrade --all-groups
 
-deep-update:
-	uv cache clear pypi --all
-	uv update --all-groups
+update-deep:
+	uv cache clean pypi
+	make update
 
 docker:
 	docker build --no-cache -f Dockerfile -t exosuit_python-smoke .
