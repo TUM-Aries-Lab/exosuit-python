@@ -18,7 +18,8 @@ uv add git+https://github.com/TUM-Aries-Lab/python-exosuit.git@<specific-tag>  #
 ## Development
 0. Install [uv](https://docs.astral.sh/uv/getting-started/installation/) from Astral.
 1. `git clone git@github.com:TUM-Aries-Lab/exosuit-python.git`
-2. `make init` to create the virtual environment and install dependencies
+2. Install the dependencies to use Makefiles.
+3. `make init` to create the virtual environment and install dependencies
 3. `make format` to format the code and check for errors
 4. `make test` to run the test suite
 5. `make clean` to delete the temporary files and directories
