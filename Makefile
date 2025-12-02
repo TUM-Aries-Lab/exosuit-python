@@ -14,7 +14,7 @@ lint:
 	uv run ruff check --fix
 
 typecheck:
-	uv run mypy src/ tests/ --ignore-missing-imports
+	uv run pyright src
 
 format:
 	make lint
@@ -29,15 +29,13 @@ clean:
 	rm -rf junit-pytest.xml
 	rm -rf logs/*
 	find . -name ".coverage*" -delete
-	find . -name "coverage.xml" -delete
 	find . -name "__pycache__" -exec rm -r {} +
 
 update:
-	uv sync --upgrade --all-groups
-	uv run pre-commit autoupdate
+	uv lock --upgrade
 
 update-deep:
-	uv cache clean pypi
+	uv cache clean
 	make update
 
 docker:
@@ -46,3 +44,11 @@ docker:
 
 app:
 	uv run python -m exosuit_python
+
+tree:
+	uv run python repo_tree.py --update-readme
+
+build:
+	uv build
+	unzip -l dist/*.whl
+	unzip -p dist/*.whl */METADATA

@@ -6,7 +6,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
 # Select the package and version at build time
-ARG PKG=exosuit_python
+ARG PKG=exosuit_python[no_hw]
 ARG VER=latest
 ENV PKG=${PKG} VER=${VER}
 
