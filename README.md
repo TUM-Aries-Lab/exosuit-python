@@ -2,7 +2,7 @@
 [![Coverage Status](https://coveralls.io/repos/github/TUM-Aries-Lab/exosuit-python/badge.svg?branch=main)](https://coveralls.io/github/TUM-Aries-Lab/exosuit-python?branch=main)
 ![Docker Image CI](https://github.com/TUM-Aries-Lab/exosuit-python/actions/workflows/ci.yml/badge.svg)
 
-This repo is the main codebase to run the lower-limb exosuit on a single board computer like the Jetson Nano.
+This repo is the main codebase to run the lower-limb exosuit on a single board computer like the Jetson Nano or Raspberry Pi.
 
 ## Install
 To install the library run:
@@ -16,7 +16,7 @@ uv add git+https://github.com/TUM-Aries-Lab/exosuit-python.git@<specific-tag>  #
 ```
 
 ## Development
-0. Install [uv](https://docs.astral.sh/uv/getting-started/installation/) from Astral.
+0. Install [**uv**](https://docs.astral.sh/uv/getting-started/installation/) from Astral.
 1. `git clone git@github.com:TUM-Aries-Lab/exosuit-python.git`
 2. Install the dependencies to use Makefiles.
 3. `make init` to create the virtual environment and install dependencies
@@ -31,7 +31,7 @@ It's super easy to publish your own packages on PyPI. To build and publish this 
 uv build
 uv publish  # make sure your version in pyproject.toml is updated
 ```
-The package can then be found at: https://pypi.org/project/exosuit-python
+The package can then be found at: **https://pypi.org/project/exosuit-python**
 
 ## Module Usage
 ```python
@@ -51,6 +51,7 @@ uv run python -m exosuit_python
 ```
 
 ## Structure
+Run `make tree` to update the repository tree scene below.
 <!-- TREE-START -->
 ```
 ├── src
@@ -63,7 +64,7 @@ uv run python -m exosuit_python
 ├── tests
 │   ├── __init__.py
 │   ├── conftest.py
-│   ├── main_test.py
+│   ├── exosuit_test.py
 │   └── utils_test.py
 ├── .dockerignore
 ├── .gitignore

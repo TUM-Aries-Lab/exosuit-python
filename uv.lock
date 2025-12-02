@@ -183,7 +183,7 @@ sdist = { url = "https://files.pythonhosted.org/packages/a2/55/8f8cab2afd404cf57
 
 [[package]]
 name = "exosuit-python"
-version = "0.0.2a1"
+version = "0.0.2"
 source = { editable = "." }
 dependencies = [
     { name = "loguru" },
