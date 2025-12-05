@@ -19,7 +19,7 @@ def main(
     setup_logger(log_level=log_level, stderr_level=stderr_level)
 
     config = ExosuitConfig(frequency=100)
-    exosuit = Exosuit(config)
+    exosuit = Exosuit(config=config)
     exosuit.run()
 
 

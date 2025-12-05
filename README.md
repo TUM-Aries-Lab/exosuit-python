@@ -36,11 +36,13 @@ The package can then be found at: **https://pypi.org/project/exosuit-python**
 ## Module Usage
 ```python
 """Basic docstring for the exosuit module."""
+from exosuit_python.exosuit import Exosuit, ExosuitConfig
 
 def main() -> None:
     """Run a simple demonstration."""
-    logger.info("Hello World!")
-
+    config = ExosuitConfig(frequency=100)
+    exosuit = Exosuit(config=config)
+    exosuit.run()
 if __name__ == "__main__":
     main()
 ```

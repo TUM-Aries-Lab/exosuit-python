@@ -17,6 +17,7 @@ from loguru import logger
 START_MARKER = "<!-- TREE-START -->"
 END_MARKER = "<!-- TREE-END -->"
 ENCODING = "utf-8"
+README = "README.md"
 
 # Manual ignores are still allowed
 MANUAL_IGNORE = {
@@ -109,11 +110,12 @@ def generate_markdown_tree() -> str:
 
 def update_readme_block(readme_path: Path) -> None:
     """Replace the section between markers with the generated tree."""
+    logger.info(f"Updating README tree for '{readme_path.name}'.")
     readme = readme_path.read_text(encoding=ENCODING).splitlines()
 
     if START_MARKER not in readme or END_MARKER not in readme:
         raise RuntimeError(
-            f"README.md must contain '{START_MARKER}' and '{END_MARKER}' markers."
+            f"{README} must contain '{START_MARKER}' and '{END_MARKER}' markers."
         )
 
     start = readme.index(START_MARKER) + 1
@@ -134,7 +136,7 @@ def main() -> None:
     args = parser.parse_args()
 
     if args.update_readme:
-        update_readme_block(Path("README.md"))
+        update_readme_block(Path(README))
     else:
         logger.info(generate_markdown_tree())
 
