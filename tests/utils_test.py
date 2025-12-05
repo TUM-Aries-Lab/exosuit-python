@@ -3,7 +3,7 @@
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from exosuit_python.definitions import LogLevel
+from exosuit_python.definitions import DEFAULT_LOG_FILENAME, LogLevel
 from exosuit_python.utils import setup_logger
 
 
@@ -11,7 +11,7 @@ def test_logger_init() -> None:
     """Test logger initialization."""
     with TemporaryDirectory() as log_dir:
         log_dir_path = Path(log_dir)
-        log_filepath = setup_logger(filename="log_file", log_dir=log_dir_path)
+        log_filepath = setup_logger(filename=DEFAULT_LOG_FILENAME, log_dir=log_dir_path)
         assert Path(log_filepath).exists()
     assert not Path(log_filepath).exists()
 
