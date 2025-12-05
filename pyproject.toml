@@ -25,6 +25,7 @@ dev = [
   "pyright>=1.1.407",
 ]
 hw = [
+    "jetson-gpio>=2.1.12",
 ]
 no_hw = [
 ]
