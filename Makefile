@@ -10,11 +10,11 @@ test:
 	rm .coverage
 
 lint:
-	uv run ruff format
-	uv run ruff check --fix
+	uv run ruff format src/ tests/
+	uv run ruff check --fix src/ tests/
 
 typecheck:
-	uv run pyright src
+	uv run pyright src/ tests/
 
 format:
 	make lint
@@ -27,7 +27,8 @@ clean:
 	rm -rf build/
 	rm -rf dist/
 	rm -rf junit-pytest.xml
-	rm -rf logs/*
+	rm -rf data/logs/*
+	rm coverage.xml
 	find . -name ".coverage*" -delete
 	find . -name "__pycache__" -exec rm -r {} +
 

@@ -1,8 +1,18 @@
 """Test the main program."""
 
-from exosuit_python.exosuit import main
+from exosuit_python.exosuit import Exosuit, ExosuitConfig
 
 
-def test_main():
+def test_exosuit():
     """Test the main function."""
-    assert main() is None
+    # Arrange
+    config = ExosuitConfig(frequency=100)
+
+    # Act
+    exosuit = Exosuit(config)
+    exosuit.run()
+
+    # Assert
+    assert exosuit._is_running
+    exosuit.cleanup()
+    assert not exosuit._is_running

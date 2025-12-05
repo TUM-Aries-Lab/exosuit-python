@@ -1,19 +1,48 @@
 """Sample doc string."""
 
+from dataclasses import dataclass
+
 from loguru import logger
 
-from exosuit_python.definitions import DEFAULT_LOG_LEVEL
-from exosuit_python.utils import setup_logger
+
+@dataclass
+class ExosuitConfig:
+    """Exosuit configuration."""
+
+    frequency: float
 
 
-def main(
-    log_level: str = DEFAULT_LOG_LEVEL, stderr_level: str = DEFAULT_LOG_LEVEL
-) -> None:
-    """Run the main pipeline.
+class Exosuit:
+    """Tendon-based soft exoskeleton."""
 
-    :param log_level: The log level to use.
-    :param stderr_level: The std err level to use.
-    :return: None
-    """
-    setup_logger(log_level=log_level, stderr_level=stderr_level)
-    logger.info("Hello, world!")
+    def __init__(self, config: ExosuitConfig):
+        self.config = config
+
+        self._is_running: bool = False
+
+        self.motor_left = "motor"  # place holder
+        self.motor_right = "motor"  # place holder
+
+        self.imu_left = "imu"  # place holder
+        self.imu_right = "imu"  # place holder
+
+    def run(self):
+        """Start the soft exoskeleton."""
+        self.start()
+
+    def start(self):
+        """Start the IMUs and Motors."""
+        logger.info(f"Starting Exosuit at '{self.config.frequency}' Hz.")
+        try:
+            logger.debug("Starting IMUs")
+            logger.debug("Starting Motors")
+            logger.debug("Starting Controller")
+            self._is_running = True
+        except Exception as err:
+            logger.info(f"Exosuit exception: '{err}'.")
+
+    def cleanup(self):
+        """Clean up the soft exoskeleton."""
+        logger.info("Cleaning up exosuit.")
+        self._is_running = False
+        logger.success("Exosuit shutdown.")
