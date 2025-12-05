@@ -13,4 +13,6 @@ def test_exosuit():
     exosuit.run()
 
     # Assert
+    assert exosuit._is_running
+    exosuit.cleanup()
     assert not exosuit._is_running

@@ -37,10 +37,12 @@ class Exosuit:
             logger.debug("Starting IMUs")
             logger.debug("Starting Motors")
             logger.debug("Starting Controller")
+            self._is_running = True
         except Exception as err:
             logger.info(f"Exosuit exception: '{err}'.")
 
     def cleanup(self):
         """Clean up the soft exoskeleton."""
         logger.info("Cleaning up exosuit.")
+        self._is_running = False
         logger.success("Exosuit shutdown.")

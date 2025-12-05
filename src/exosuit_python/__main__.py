@@ -7,9 +7,7 @@ from exosuit_python.exosuit import Exosuit, ExosuitConfig
 from exosuit_python.utils import setup_logger
 
 
-def main(
-    log_level: str = DEFAULT_LOG_LEVEL, stderr_level: str = DEFAULT_LOG_LEVEL
-) -> None:
+def main(log_level: str, stderr_level: str) -> None:  # pragma: no cover
     """Run the main pipeline.
 
     :param log_level: The log level to use.
@@ -21,6 +19,7 @@ def main(
     config = ExosuitConfig(frequency=100)
     exosuit = Exosuit(config=config)
     exosuit.run()
+    exosuit.cleanup()
 
 
 if __name__ == "__main__":  # pragma: no cover
