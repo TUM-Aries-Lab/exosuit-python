@@ -19,7 +19,11 @@ def main(log_level: str, stderr_level: str) -> None:  # pragma: no cover
     config = ExosuitConfig(frequency=100)
     exosuit = Exosuit(config=config)
     exosuit.run()
-    exosuit.cleanup()
+    try:
+        while True:
+            pass
+    except KeyboardInterrupt:
+        exosuit.cleanup()
 
 
 if __name__ == "__main__":  # pragma: no cover

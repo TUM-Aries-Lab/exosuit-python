@@ -12,7 +12,7 @@ dependencies = [
   "numpy>=2.2.3",
   "loguru>=0.7.3",
   "motor-python>=0.0.3",
-  "imu-python>=0.0.3",
+  "imu-python>=0.0.10",
 ]
 
 [dependency-groups]
@@ -26,6 +26,9 @@ dev = [
 ]
 hw = [
     "jetson-gpio>=2.1.12",
+    "adafruit-extended-bus>=1.0.2",
+    "adafruit-circuitpython-bno055>=5.4.20",
+    "adafruit-circuitpython-lsm6ds>=4.5.18",
 ]
 no_hw = [
 ]
