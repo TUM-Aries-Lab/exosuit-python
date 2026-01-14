@@ -79,7 +79,7 @@ class Exosuit:
         self.imu_hip.stop()
         self.imu_left.stop()
         self.imu_right.stop()
-        self.motor_left.stop()
+        self.motor_left.close()
         if self.thread is not None and self.thread.is_alive():
             self.thread.join(timeout=THREAD_JOIN_TIMEOUT)
         self._is_running = False
@@ -134,18 +134,9 @@ class Exosuit:
         """
         # TODO: right motor
         try:
-            if not self.motor_left.connected:
-                logger.error("Motor hardware not connected. Check connections.")
-                return False
             if not self.motor_left.check_communication():
                 logger.error("Motor not responding. Check power and connections.")
                 return False
-
-            logger.info("Testing motor feedback response...")
-            # Query motor status at startup
-            logger.info("Initial motor status query:")
-            self.motor_left.get_status()
-            time.sleep(0.5)
             return True
         except Exception as err:
             logger.error(f"Exosuit exception: '{err}'. Check Motor connections.")
