@@ -20,7 +20,7 @@ def main(log_level: str, stderr_level: str) -> None:  # pragma: no cover
     exosuit = Exosuit(config=config)
     exosuit.run()
     try:
-        while True:
+        while exosuit._is_running:
             pass
     except KeyboardInterrupt:
         exosuit.cleanup()

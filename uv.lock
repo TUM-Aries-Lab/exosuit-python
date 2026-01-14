@@ -457,9 +457,9 @@ hw = [
 
 [package.metadata]
 requires-dist = [
-    { name = "imu-python", specifier = ">=0.0.10" },
+    { name = "imu-python", specifier = ">=0.0.12" },
     { name = "loguru", specifier = ">=0.7.3" },
-    { name = "motor-python", specifier = ">=0.0.3" },
+    { name = "motor-python", specifier = ">=0.0.4" },
     { name = "numpy", specifier = ">=2.2.3" },
 ]
 
@@ -542,7 +542,7 @@ wheels = [
 
 [[package]]
 name = "imu-python"
-version = "0.0.10"
+version = "0.0.12"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "ahrs" },
@@ -552,9 +552,9 @@ dependencies = [
     { name = "pandas" },
     { name = "scipy" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/69/cf/5c1a93973fc3a3277d2ac0d092a41c96867c024ca3c17ce2ffb638ddeeb5/imu_python-0.0.10.tar.gz", hash = "sha256:370e43f2f0443dbe93b8742dc0562dd5ae5a24d016f77019e2815f71feba6f3b", size = 17072, upload-time = "2026-01-12T12:36:28.408Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/e2/a5/44e40827ca000c9ee3401149ad892a261d2a727edf0ac1ce4522e8518dee/imu_python-0.0.12.tar.gz", hash = "sha256:dea85a88f48d99db12211e60cea69d5ae9ebbe54dcc48d8cdad4b91a33e14772", size = 17527, upload-time = "2026-01-14T09:13:50.896Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/d6/a2/ec8f5426c27656bbd68acf1ded18b2bf0fa08e8c2d9ce3976ea7e6ca0068/imu_python-0.0.10-py3-none-any.whl", hash = "sha256:03026b968b39731611e794274e9a4080ad44caf2fe0e4017ce417207ede751d9", size = 20949, upload-time = "2026-01-12T12:36:26.578Z" },
+    { url = "https://files.pythonhosted.org/packages/c8/d4/13eaf185f7f99cb03a8c050d39f0ea19e1100ccda7a8ea3dd017ddd68311/imu_python-0.0.12-py3-none-any.whl", hash = "sha256:7251794f386ad4547f1487bded41eaf98014f2f5e8d28acd7d4139448de6c59b", size = 21428, upload-time = "2026-01-14T09:13:49.577Z" },
 ]
 
 [[package]]
@@ -701,15 +701,16 @@ wheels = [
 
 [[package]]
 name = "motor-python"
-version = "0.0.3"
+version = "0.0.4"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "loguru" },
     { name = "numpy" },
+    { name = "pyserial" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/b5/5a/41a092de626b51c587f37b86a74303e3d07b033d06a0fbe58f283e9586b4/motor_python-0.0.3.tar.gz", hash = "sha256:6dbed01e86862e6de0887aaca677e05ec01c88f0c04f4cadad39cc5f02c22f6c", size = 5492, upload-time = "2025-12-01T14:23:44.872Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/aa/b6/b4df9022c664b0401e4be96a83fd8ab64ac4be97a675412350cade6c528b/motor_python-0.0.4.tar.gz", hash = "sha256:da8407802d6062ef79fad4031ce2f09cb81daca85f518f2362413fd59bac9942", size = 16194, upload-time = "2026-01-12T13:59:31.7Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/ad/4a/8696054211635fa5e021d7c2b7f673dd3779b563cc43e21f2c559a7c4447/motor_python-0.0.3-py3-none-any.whl", hash = "sha256:2b26e5fa0b5abd167803315835fcededd954932543cee33ef80fc25763ef0901", size = 5284, upload-time = "2025-12-01T14:23:43.612Z" },
+    { url = "https://files.pythonhosted.org/packages/8c/86/d413cf0ac466df5d4f7c751a006e413f051e5e09955ce468ad94d88565f1/motor_python-0.0.4-py3-none-any.whl", hash = "sha256:54794021d920ded93c882b4317a1005ed9d1a37e50fe2ea93b9e7f8b6babac5c", size = 17080, upload-time = "2026-01-12T13:59:30.441Z" },
 ]
 
 [[package]]

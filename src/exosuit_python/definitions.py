@@ -41,3 +41,5 @@ class LogLevel:
 
 DEFAULT_LOG_LEVEL = LogLevel.info
 DEFAULT_LOG_FILENAME = "log_file"
+
+THREAD_JOIN_TIMEOUT = 2.0
