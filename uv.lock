@@ -433,6 +433,7 @@ name = "exosuit-python"
 version = "0.0.2"
 source = { editable = "." }
 dependencies = [
+    { name = "hip-controller" },
     { name = "imu-python" },
     { name = "loguru" },
     { name = "motor-python" },
@@ -457,6 +458,7 @@ hw = [
 
 [package.metadata]
 requires-dist = [
+    { name = "hip-controller", specifier = ">=0.0.3" },
     { name = "imu-python", specifier = ">=0.0.12" },
     { name = "loguru", specifier = ">=0.7.3" },
     { name = "motor-python", specifier = ">=0.0.4" },
@@ -520,6 +522,21 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/73/aa/28e40b8d6809a9b5075350a86779163f074d2b617c15d22343fce81918db/fonttools-4.61.1-cp313-cp313-win32.whl", hash = "sha256:4d7092bb38c53bbc78e9255a59158b150bcdc115a1e3b3ce0b5f267dc35dd63c", size = 2267821, upload-time = "2025-12-12T17:30:38.478Z" },
     { url = "https://files.pythonhosted.org/packages/1a/59/453c06d1d83dc0951b69ef692d6b9f1846680342927df54e9a1ca91c6f90/fonttools-4.61.1-cp313-cp313-win_amd64.whl", hash = "sha256:21e7c8d76f62ab13c9472ccf74515ca5b9a761d1bde3265152a6dc58700d895b", size = 2318169, upload-time = "2025-12-12T17:30:40.951Z" },
     { url = "https://files.pythonhosted.org/packages/c7/4e/ce75a57ff3aebf6fc1f4e9d508b8e5810618a33d900ad6c19eb30b290b97/fonttools-4.61.1-py3-none-any.whl", hash = "sha256:17d2bf5d541add43822bcf0c43d7d847b160c9bb01d15d5007d84e2217aaa371", size = 1148996, upload-time = "2025-12-12T17:31:21.03Z" },
+]
+
+[[package]]
+name = "hip-controller"
+version = "0.0.3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "loguru" },
+    { name = "numpy" },
+    { name = "pandas" },
+    { name = "scipy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/15/0c/a17955b640d251dfa14aa6287979a2980aa895bef03e1bb1a88163e9e3fb/hip_controller-0.0.3.tar.gz", hash = "sha256:e90a333fb363c6895125624ac9ce54a10e4526d994eefa0002eea6e63d27ae2f", size = 15364, upload-time = "2026-01-30T10:43:24.627Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e6/a8/52d964b617facd03903150c393d02e1128cd20bc8e1dae88d7e5c8a72ce4/hip_controller-0.0.3-py3-none-any.whl", hash = "sha256:f28db1e3bbd7126578406a7e49ba8e8f3a880c1b16e7be7ed86569534d2ac801", size = 16644, upload-time = "2026-01-30T10:43:23.482Z" },
 ]
 
 [[package]]

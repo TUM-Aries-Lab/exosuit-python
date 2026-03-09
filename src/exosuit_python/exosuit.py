@@ -1,4 +1,4 @@
-"""Sample doc string."""
+"""Exosuit configuration."""
 
 import threading
 import time

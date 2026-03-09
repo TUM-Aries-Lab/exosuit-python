@@ -3,7 +3,7 @@ name = "exosuit_python"
 version = "0.0.2"
 description = "IMU sensor codes in Python for the exosuit"
 readme = "README.md"
-authors = [{ name = "Tsmorz", email = "tony.smoragiewicz@tum.de" }]
+authors = [{ name = "Tsmorz", email = "tony.smoragiewicz@tum.de" },{ name = "Zhongge Lin", email = "zg.lin@outlook.com" },{ name = "Haoqing Yang", email = "Yang_Haoqing@outlook.com" }]
 requires-python = ">=3.11,<3.14"
 homepage = "https://github.com/TUM-Aries-Lab/exosuit-python"
 
@@ -13,6 +13,7 @@ dependencies = [
   "loguru>=0.7.3",
   "motor-python>=0.0.4",
   "imu-python>=0.0.12",
+  "hip-controller>=0.0.3",
 ]
 
 [dependency-groups]
