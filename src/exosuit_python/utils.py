@@ -2,6 +2,7 @@
 
 import sys
 from datetime import datetime
+from math import pi
 from pathlib import Path
 
 from loguru import logger
@@ -13,6 +14,11 @@ from exosuit_python.definitions import (
     ENCODING,
     LOG_DIR,
 )
+
+
+def convert_rad_per_sec_to_rpm(velocity_rad_per_sec: float) -> int:
+    """Convert velocity value from rad/s to eRPM and round to integer."""
+    return int((velocity_rad_per_sec * 60) / (2 * pi))
 
 
 def create_timestamped_filepath(suffix: str, output_dir: Path, prefix: str) -> Path:

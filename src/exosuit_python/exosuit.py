@@ -4,7 +4,8 @@ import threading
 import time
 from dataclasses import dataclass
 
-import numpy as np
+from hip_controller.control.app import WalkOnController
+from hip_controller.definitions import SensorSignal
 from imu_python.definitions import I2CBusID
 from imu_python.factory import IMUFactory
 from imu_python.sensor_manager import IMUManager
@@ -12,6 +13,7 @@ from loguru import logger
 from motor_python.cube_mars_motor import CubeMarsAK606v3
 
 from exosuit_python.definitions import THREAD_JOIN_TIMEOUT
+from exosuit_python.utils import convert_rad_per_sec_to_rpm
 
 
 @dataclass
@@ -36,9 +38,11 @@ class Exosuit:
         self.imu_hip: IMUManager
         self.imu_left: IMUManager
         self.imu_right: IMUManager
+        self.controller_left = WalkOnController(reverse=False)
+        self.controller_right = WalkOnController(reverse=True)
         self.motor_left: CubeMarsAK606v3 = CubeMarsAK606v3()
         self.motor_left_position_degrees: float = 0.0  # place holder
-        self.motor_right = "motor"  # place holder
+        self.motor_right = ["Motor right."]  # place holder
 
         self.imu_initialized: bool = self._initialize_imus()
         self.motors_initialized: bool = self._initialize_motors()
@@ -89,21 +93,34 @@ class Exosuit:
         """Run main control loop."""
         while self._is_running:
             try:
-                self._place_holder_controller()
+                timestamp_right = self.imu_right.get_data().timestamp
+                signal_right = SensorSignal(
+                    angle_rad=self.imu_right.get_data().quat.to_euler(seq="xyz").z,
+                    velocity_rad_per_sec=self.imu_right.get_data().raw_data.gyro.z,
+                )
+                command_right = self.controller_right.step(
+                    timestamp=timestamp_right, curr_signal=signal_right
+                )
+
+                timestamp_left = self.imu_left.get_data().timestamp
+                signal_left = SensorSignal(
+                    angle_rad=self.imu_left.get_data().quat.to_euler(seq="xyz").z,
+                    velocity_rad_per_sec=self.imu_right.get_data().raw_data.gyro.z,
+                )
+                command_left = self.controller_left.step(
+                    timestamp=timestamp_left, curr_signal=signal_left
+                )
+
+                self.motor_left.set_velocity(convert_rad_per_sec_to_rpm(command_left))
+
+                # place holder
+                self.motor_right.append(
+                    f"Motor command at timestamp {timestamp_right} is {convert_rad_per_sec_to_rpm(command_right)} ERPM.)"
+                )
+
                 time.sleep(1 / self.config.frequency)
             except Exception as err:
                 logger.error(f"Exosuit control loop exception: '{err}'.")
-
-    def _place_holder_controller(self) -> None:
-        """Control function - to be replaced with actual control logic."""
-        imu_data = self.imu_right.get_data()
-
-        angle = (
-            np.rad2deg(imu_data.raw_data.gyro.y) * 0.1
-        )  # scale down for demo purposes
-        self.motor_left_position_degrees += angle
-        self.motor_left_position_degrees %= 360.0  # wrap around at 360 degrees
-        self.motor_left.set_position(position_degrees=self.motor_left_position_degrees)
 
     def _initialize_imus(self) -> bool:
         """Initialize IMUs.

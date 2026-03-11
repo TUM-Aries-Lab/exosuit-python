@@ -5,19 +5,11 @@ from enum import StrEnum
 from pathlib import Path
 
 import pandas as pd
+from hip_controller.definitions import SensorSignal
 from loguru import logger
 
 from exosuit_python.definitions import RECORDINGS_DIR
 from exosuit_python.utils import create_timestamped_filepath
-
-
-# TODO replace this dataclass with import from definitions of hip controller
-@dataclass
-class SensorSignal:
-    """Angle and velocity signal values."""
-
-    angle_rad: float = 0.0
-    velocity_rad_per_sec: float = 0.0
 
 
 @dataclass
