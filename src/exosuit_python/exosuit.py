@@ -12,7 +12,7 @@ from imu_python.sensor_manager import IMUManager
 from loguru import logger
 from motor_python.cube_mars_motor import CubeMarsAK606v3
 
-from exosuit_python.definitions import THREAD_JOIN_TIMEOUT
+from exosuit_python.definitions import THREAD_JOIN_TIMEOUT, ConfigTension
 from exosuit_python.utils import convert_rad_per_sec_to_rpm
 
 
@@ -34,20 +34,27 @@ class Exosuit:
         self.config = config
 
         self._is_running: bool = False
+        self._is_tensioning: bool = False
+
         self.thread: threading.Thread = threading.Thread(target=self._loop, daemon=True)
+
         self.imu_hip: IMUManager
         self.imu_left: IMUManager
         self.imu_right: IMUManager
+
         self.controller_left = WalkOnController(reverse=False)
         self.controller_right = WalkOnController(reverse=True)
+
         self.motor_left: CubeMarsAK606v3 = CubeMarsAK606v3()
-        self.motor_left_position_degrees: float = 0.0  # place holder
         self.motor_right = ["Motor right."]  # place holder
 
         self.imu_initialized: bool = self._initialize_imus()
         self.motors_initialized: bool = self._initialize_motors()
 
-    def run(self):
+    def turn_on_exosuit_switch(self) -> None:
+        """Turn on the exosuit switch to start the exosuit."""
+        self._is_running = True
+
         """Start the soft exoskeleton."""
         if not self.imu_initialized:
             logger.error("IMU initialization failed. Exosuit not started.")
@@ -55,29 +62,41 @@ class Exosuit:
         if not self.motors_initialized:
             logger.error("Motor initialization failed. Exosuit not started.")
             return
+        self._start()
 
-        self.start()
+    def turn_off_exosuit_switch(self) -> None:
+        """Turn off the exosuit switch to stop the exosuit."""
+        self._is_running = False
+        self._cleanup()
 
-    def start(self):
+    def turn_on_tension_switch(self) -> None:
+        """Start tensioning process of the exosuit."""
+        self._is_tensioning = True
+        self.motor_left.set_velocity(ConfigTension.tensioning_velocity)
+        # TODO get motor_torque from motor and loop to see if >= 0.85 the velocity should be zero. After one second the process should be stopped
+
+    def _start(self) -> None:
         """Start the IMUs and Motors."""
+        self._is_running = True
+
         logger.info(f"Starting Exosuit at '{self.config.frequency}' Hz.")
         try:
             logger.debug("Starting IMUs")
             self.imu_hip.start()
             self.imu_left.start()
             self.imu_right.start()
+
             logger.debug("Starting Motors")
             logger.debug("Starting Controller")
-            self._is_running = True
 
             # Start main control loop
             self.thread.start()
 
         except Exception as err:
             logger.info(f"Exosuit exception: '{err}'.")
-            self.cleanup()
+            self._cleanup()
 
-    def cleanup(self):
+    def _cleanup(self) -> None:
         """Clean up the soft exoskeleton."""
         logger.info("Cleaning up exosuit.")
         self.imu_hip.stop()
@@ -91,7 +110,7 @@ class Exosuit:
 
     def _loop(self) -> None:
         """Run main control loop."""
-        while self._is_running:
+        while self._is_running and not self._is_tensioning:
             try:
                 timestamp_right = self.imu_right.get_data().timestamp
                 signal_right = SensorSignal(
