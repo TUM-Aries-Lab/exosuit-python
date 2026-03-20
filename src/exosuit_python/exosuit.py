@@ -73,6 +73,7 @@ class Exosuit:
         """Start tensioning process of the exosuit."""
         self._is_tensioning = True
         self.motor_left.set_velocity(ConfigTension.tensioning_velocity)
+
         # TODO get motor_torque from motor and loop to see if >= 0.85 the velocity should be zero. After one second the process should be stopped
 
     def _start(self) -> None:
@@ -112,19 +113,25 @@ class Exosuit:
         """Run main control loop."""
         while self._is_running and not self._is_tensioning:
             try:
-                timestamp_right = self.imu_right.get_data().timestamp
+                data_right = self.imu_right.get_data()
+                data_left = self.imu_left.get_data()
+
+                if data_right is None or data_left is None:
+                    raise TypeError
+
+                timestamp_right = data_right.timestamp
                 signal_right = SensorSignal(
-                    angle_rad=self.imu_right.get_data().quat.to_euler(seq="xyz").z,
-                    velocity_rad_per_sec=self.imu_right.get_data().raw_data.gyro.z,
+                    angle_rad=data_right.quat.to_euler(seq="xyz").z,
+                    velocity_rad_per_sec=data_right.device_data.gyro.z,
                 )
                 command_right = self.controller_right.step(
                     timestamp=timestamp_right, curr_signal=signal_right
                 )
 
-                timestamp_left = self.imu_left.get_data().timestamp
+                timestamp_left = data_left.timestamp
                 signal_left = SensorSignal(
-                    angle_rad=self.imu_left.get_data().quat.to_euler(seq="xyz").z,
-                    velocity_rad_per_sec=self.imu_right.get_data().raw_data.gyro.z,
+                    angle_rad=data_left.quat.to_euler(seq="xyz").z,
+                    velocity_rad_per_sec=data_left.device_data.gyro.z,
                 )
                 command_left = self.controller_left.step(
                     timestamp=timestamp_left, curr_signal=signal_left
@@ -138,6 +145,8 @@ class Exosuit:
                 )
 
                 time.sleep(1 / self.config.frequency)
+            except TypeError as err:
+                logger.error(f"Failed getting data from the IMU: '{err}'.")
             except Exception as err:
                 logger.error(f"Exosuit control loop exception: '{err}'.")
 
@@ -147,6 +156,7 @@ class Exosuit:
         :return: True if successful, False otherwise
         """
         try:
+            # TODO changes
             sensor_managers_hip = IMUFactory.detect_and_create(
                 i2c_id=I2CBusID.bus_1,
                 log_data=False,
