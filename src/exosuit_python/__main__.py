@@ -18,8 +18,12 @@ def main(log_level: str, stderr_level: str) -> None:  # pragma: no cover
 
     config = ExosuitConfig(frequency=100)
     exosuit = Exosuit(config=config)
-    exosuit.run()
-    exosuit.cleanup()
+    exosuit.turn_on_exosuit_switch()
+    try:
+        while exosuit._is_running:
+            pass
+    except KeyboardInterrupt:
+        exosuit._cleanup()
 
 
 if __name__ == "__main__":  # pragma: no cover
