@@ -570,7 +570,7 @@ hw = [
 [package.metadata]
 requires-dist = [
     { name = "hip-controller", specifier = ">=0.0.4" },
-    { name = "imu-python", specifier = ">=0.0.12" },
+    { name = "imu-python", specifier = ">=0.1.1" },
     { name = "loguru", specifier = ">=0.7.3" },
     { name = "motor-python", specifier = ">=0.0.4" },
     { name = "numpy", specifier = ">=2.2.3" },
@@ -689,7 +689,7 @@ wheels = [
 
 [[package]]
 name = "imu-python"
-version = "0.1.0"
+version = "0.1.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "ahrs" },
@@ -701,9 +701,9 @@ dependencies = [
     { name = "py-imu" },
     { name = "scipy" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/8f/d5/43da3175a9c92da28fcf30e4da6eae81a7c189f526809d4c07ba86bea01f/imu_python-0.1.0.tar.gz", hash = "sha256:1f95381e3c0d44470614911d279e3ef7294495b52e1df894d88bd08eded37477", size = 30447, upload-time = "2026-03-18T10:24:27.387Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/90/06/d414bcaefd6a9dfa9954d2692df3c897df0aa684a72a5fdf7e36c781f86c/imu_python-0.1.1.tar.gz", hash = "sha256:e48e641a8420b3718aa3dc39e870b93a2984acc434e7c52c3642ddbe0dc7cfcf", size = 32569, upload-time = "2026-04-21T09:22:23.323Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/34/62/664b7daec8672713dd39df57bb56be16f613027f0941e7c79b9dfc212cfd/imu_python-0.1.0-py3-none-any.whl", hash = "sha256:ad10a34122445b3f8e70fe601edefa7dbcc3d9beb2a5573468cb773b5b4ccf26", size = 36544, upload-time = "2026-03-18T10:24:25.79Z" },
+    { url = "https://files.pythonhosted.org/packages/38/62/e64a4204f6abb091a415ff5b95aef2bfffa47e48686addeb365ae62686e8/imu_python-0.1.1-py3-none-any.whl", hash = "sha256:3bca7535f6c888313c550fb329714949acd145980bde9ba33470a8aec35ea167", size = 39263, upload-time = "2026-04-21T09:22:21.983Z" },
 ]
 
 [[package]]

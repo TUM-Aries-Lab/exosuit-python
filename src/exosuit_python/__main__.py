@@ -7,7 +7,7 @@ from exosuit_python.exosuit import Exosuit, ExosuitConfig
 from exosuit_python.utils import setup_logger
 
 
-def main(log_level: str, stderr_level: str) -> None:  # pragma: no cover
+def main(log_level: str, stderr_level: str, mock: bool) -> None:  # pragma: no cover
     """Run the main pipeline.
 
     :param log_level: The log level to use.
@@ -16,14 +16,10 @@ def main(log_level: str, stderr_level: str) -> None:  # pragma: no cover
     """
     setup_logger(log_level=log_level, stderr_level=stderr_level)
 
-    config = ExosuitConfig(frequency=100)
-    exosuit = Exosuit(config=config)
-    exosuit.turn_on_exosuit_switch()
-    try:
-        while exosuit._is_running:
-            pass
-    except KeyboardInterrupt:
-        exosuit._cleanup()
+    config = ExosuitConfig(frequency=100, mock=mock)
+    Exosuit(config=config)
+
+    # Current implementation uses main thread for exosuit state handler loop
 
 
 if __name__ == "__main__":  # pragma: no cover
@@ -44,6 +40,13 @@ if __name__ == "__main__":  # pragma: no cover
         required=False,
         type=str,
     )
+    parser.add_argument(
+        "--mock",
+        default=False,
+        help="Use mock devices.",
+        required=False,
+        type=bool,
+    )
     args = parser.parse_args()
 
-    main(log_level=args.log_level, stderr_level=args.stderr_level)
+    main(log_level=args.log_level, stderr_level=args.stderr_level, mock=args.mock)
