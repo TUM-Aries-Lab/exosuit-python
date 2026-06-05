@@ -1,5 +1,7 @@
 """Common definitions for this module."""
 
+from __future__ import annotations
+
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
@@ -51,7 +53,7 @@ EXOSUIT_STANDBY_INTERVAL = 0.1
 
 @dataclass(frozen=True)
 class TensionConfig:
-    """Configurations for tensioning."""
+    """Configurations for tensioning."""  # TODO: unit
 
     tensioning_velocity: int = 3
     motor_torque_limit: float = 0.85  # tensioned when motor_torque >= 0.85
@@ -65,11 +67,11 @@ class IMUConfig:
 
     left_leg_bus: int = 7
     left_leg_descr: IMUDescriptor = field(
-        default_factory=lambda: IMUDescriptor(name="BNO055", index=0)
+        default_factory=lambda: IMUDescriptor(name="MOCK", index=0)
     )
     right_leg_bus: int = 7
     right_leg_descr: IMUDescriptor = field(
-        default_factory=lambda: IMUDescriptor(name="BNO055", index=1)
+        default_factory=lambda: IMUDescriptor(name="MOCK", index=1)
     )
 
 
@@ -78,3 +80,7 @@ POWER_SWITCH = 7  # TODO: placeholder
 TENSION_SWITCH = 15  # TODO: placeholder
 
 GPIO_SWITCH_BOUNCETIME = 50  # TODO: test this threshold
+
+# switch signals
+SWITCH_ON = "FALLING"
+SWITCH_OFF = "RISING"

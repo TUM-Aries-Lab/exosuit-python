@@ -2,15 +2,22 @@
 
 import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import IntEnum
 
+from loguru import logger
+
+try:
+    from Jetson import GPIO
+except Exception:
+    logger.warning("Jetson GPIO import failed. Are you running on the Jetson?")
+    from exosuit_python.gpio import MockGPIO
+
+    GPIO = MockGPIO()
 from hip_controller.control.app import WalkOnController
 from hip_controller.definitions import SensorSignal
 from imu_python.factory import IMUFactory
 from imu_python.sensor_manager import IMUManager
-from Jetson import GPIO
-from loguru import logger
 from motor_python.cube_mars_motor import CubeMarsAK606v3
 
 from exosuit_python.definitions import (
@@ -18,11 +25,14 @@ from exosuit_python.definitions import (
     GPIO_SWITCH_BOUNCETIME,
     POWER_SWITCH,
     SWITCH_EVENT_HANDLER_INTERVAL,
+    SWITCH_OFF,
+    SWITCH_ON,
     TENSION_SWITCH,
     THREAD_JOIN_TIMEOUT,
     IMUConfig,
     TensionConfig,
 )
+from exosuit_python.motor import MockMotor
 from exosuit_python.utils import convert_rad_per_sec_to_rpm
 
 
@@ -32,6 +42,7 @@ class ExosuitConfig:
 
     frequency: float
     mock: bool = False
+    imu_cfg: IMUConfig = field(default_factory=IMUConfig)
 
 
 class ExosuitStates(IntEnum):
@@ -59,6 +70,9 @@ class Exosuit:
         self._tension_switch: bool = False
 
         self.thread: threading.Thread = threading.Thread(target=self._loop, daemon=True)
+        self.switch_thread: threading.Thread = threading.Thread(
+            target=self._switch_event_handler, daemon=True
+        )
 
         self.imu_left: IMUManager
         self.imu_right: IMUManager
@@ -66,75 +80,95 @@ class Exosuit:
         self.controller_left = WalkOnController(reverse=False)
         self.controller_right = WalkOnController(reverse=True)
 
-        self.motor_left: CubeMarsAK606v3 = CubeMarsAK606v3()
-        self.motor_right = ["Motor right."]  # place holder
+        self.motor_left: CubeMarsAK606v3 | MockMotor
+        self.motor_right: CubeMarsAK606v3 | MockMotor
 
-        self.imu_initialized: bool = self._initialize_imus()
-        self.motors_initialized: bool = self._initialize_motors()
+        if not self.config.mock:
+            self.motor_left = CubeMarsAK606v3()
+            self.motor_right = CubeMarsAK606v3()
+        else:
+            self.motor_left = MockMotor()
+            self.motor_right = MockMotor()
 
+        if not self._initialize_imus():
+            logger.error("IMU initialization failed. Exosuit not started.")
+            return
+        if not self._initialize_motors():
+            logger.error("Motor initialization failed. Exosuit not started.")
+            return
+        if hasattr(GPIO, SWITCH_ON) and hasattr(GPIO, SWITCH_OFF):
+            self.on_signal = getattr(GPIO, SWITCH_ON)
+            self.off_signal = getattr(GPIO, SWITCH_OFF)
+        else:
+            logger.error(
+                f"GPIO signal attribute '{SWITCH_ON}' or '{SWITCH_OFF}' not found."
+            )
+            return
         self._gpio_setup()
         self._start()
-        self._switch_event_handler()
 
-    def _gpio_setup(self) -> None:
+    def _gpio_setup(self) -> bool:
         """Set up Jetson GPIO switches."""
-        GPIO.setmode(GPIO.BOARD)
-        GPIO.setup(POWER_SWITCH, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-        GPIO.setup(TENSION_SWITCH, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-
-        GPIO.add_event_detect(
-            POWER_SWITCH,
-            GPIO.FALLING,  # TODO: wiring
-            callback=self._power_on_callback,
-            bouncetime=GPIO_SWITCH_BOUNCETIME,
-        )
-
-        GPIO.add_event_detect(
-            POWER_SWITCH,
-            GPIO.RISING,  # TODO: wiring
-            callback=self._power_off_callback,
-            bouncetime=GPIO_SWITCH_BOUNCETIME,
-        )
-
-        GPIO.add_event_detect(
-            TENSION_SWITCH,
-            GPIO.FALLING,  # TODO: wiring
-            callback=self._tension_on_callback,
-            bouncetime=GPIO_SWITCH_BOUNCETIME,
-        )
-
-        GPIO.add_event_detect(
-            TENSION_SWITCH,
-            GPIO.RISING,  # TODO: wiring
-            callback=self._tension_off_callback,
-            bouncetime=GPIO_SWITCH_BOUNCETIME,
-        )
-
-    def _switch_event_handler(self) -> None:
-        """Monitor switch states and handle exosuit status changes."""
         try:
-            while True:
-                if self._status == ExosuitStates.STANDBY:
-                    if self._power_switch and not self._tension_switch:
-                        logger.info("State change: standby -> running")
-                        self._status = ExosuitStates.RUNNING
-                    elif self._tension_switch and not self._power_switch:
-                        logger.info("State change: standby -> pretensioning")
-                        self._status = ExosuitStates.PRETENSIONING
-                        self._pretension()
-                elif self._status == ExosuitStates.RUNNING:
-                    if not self._power_switch:
-                        logger.info("State change: running -> standby")
-                        self._status = ExosuitStates.STANDBY
-                elif self._status == ExosuitStates.PRETENSIONING:
-                    if not self._tension_switch:
-                        logger.info("State change: pretensioning -> standby")
-                        self._status = ExosuitStates.STANDBY
-                elif self._status == ExosuitStates.STOPPED:
-                    break
-                time.sleep(SWITCH_EVENT_HANDLER_INTERVAL)
-        finally:
-            self._cleanup()
+            GPIO.setmode(GPIO.BOARD)
+            GPIO.setup(POWER_SWITCH, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+            GPIO.setup(TENSION_SWITCH, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+
+            GPIO.add_event_detect(
+                POWER_SWITCH,
+                self.on_signal,
+                callback=self._power_on_callback,
+                bouncetime=GPIO_SWITCH_BOUNCETIME,
+            )
+
+            GPIO.add_event_detect(
+                POWER_SWITCH,
+                self.off_signal,
+                callback=self._power_off_callback,
+                bouncetime=GPIO_SWITCH_BOUNCETIME,
+            )
+
+            GPIO.add_event_detect(
+                TENSION_SWITCH,
+                self.on_signal,
+                callback=self._tension_on_callback,
+                bouncetime=GPIO_SWITCH_BOUNCETIME,
+            )
+
+            GPIO.add_event_detect(
+                TENSION_SWITCH,
+                self.off_signal,
+                callback=self._tension_off_callback,
+                bouncetime=GPIO_SWITCH_BOUNCETIME,
+            )
+            return True
+        except Exception as err:
+            logger.error(f"Jetson GPIO init failure: {err}")
+            GPIO.cleanup()
+            return False
+
+    def _switch_event_handler(
+        self,
+    ) -> None:  # TODO: implement proper state machine if needed
+        """Monitor switch states and handle exosuit status changes."""
+        while self._status != ExosuitStates.STOPPED:
+            if self._status == ExosuitStates.STANDBY:
+                if self._power_switch and not self._tension_switch:
+                    logger.info("State change: standby -> running")
+                    self._status = ExosuitStates.RUNNING
+                elif self._tension_switch and not self._power_switch:
+                    logger.info("State change: standby -> pretensioning")
+                    self._status = ExosuitStates.PRETENSIONING
+                    self._pretension()
+            elif self._status == ExosuitStates.RUNNING:
+                if not self._power_switch:
+                    logger.info("State change: running -> standby")
+                    self._status = ExosuitStates.STANDBY
+            elif self._status == ExosuitStates.PRETENSIONING:
+                if not self._tension_switch:
+                    logger.info("State change: pretensioning -> standby")
+                    self._status = ExosuitStates.STANDBY
+            time.sleep(SWITCH_EVENT_HANDLER_INTERVAL)
 
     def _pretension(self) -> None:
         """Pretension the tendons by turning the motors."""
@@ -155,13 +189,6 @@ class Exosuit:
 
     def _start(self) -> None:
         """Start the IMUs and Motors."""
-        if not self.imu_initialized:
-            logger.error("IMU initialization failed. Exosuit not started.")
-            return
-        if not self.motors_initialized:
-            logger.error("Motor initialization failed. Exosuit not started.")
-            return
-
         logger.info(f"Starting Exosuit at '{self.config.frequency}' Hz.")
         try:
             logger.debug("Starting IMUs")
@@ -172,8 +199,10 @@ class Exosuit:
             logger.debug("Starting Controller")
 
             self._status = ExosuitStates.STANDBY
+            logger.info("Exosuit status: standby")
             # Start main control loop
             self.thread.start()
+            self.switch_thread.start()
 
         except Exception as err:
             logger.info(f"Exosuit exception: '{err}'.")
@@ -189,6 +218,8 @@ class Exosuit:
         self.motor_left.close()
         if self.thread is not None and self.thread.is_alive():
             self.thread.join(timeout=THREAD_JOIN_TIMEOUT)
+        if self.switch_thread is not None and self.switch_thread.is_alive():
+            self.switch_thread.join(timeout=THREAD_JOIN_TIMEOUT)
         logger.success("Exosuit shutdown.")
 
     def _loop(self) -> None:
@@ -224,9 +255,8 @@ class Exosuit:
                         convert_rad_per_sec_to_rpm(command_left)
                     )
 
-                    # place holder
-                    self.motor_right.append(
-                        f"Motor command at timestamp {timestamp_right} is {convert_rad_per_sec_to_rpm(command_right)} ERPM.)"
+                    self.motor_left.set_velocity(
+                        convert_rad_per_sec_to_rpm(command_right)
                     )
 
                     time.sleep(1 / self.config.frequency)
@@ -260,21 +290,23 @@ class Exosuit:
                 log_data=False,
             )
             detected_imus = len(sensor_managers)
-            if detected_imus != 2:
-                raise ValueError(f"Wrong number of IMUs detected: {detected_imus} != 2")
-            for idx in range(2):  # Match each leg with the IMU according to IMUConfig
+            if detected_imus < 2:
+                raise ValueError(f"Wrong number of IMUs detected: {detected_imus} < 2")
+            for idx in range(
+                detected_imus
+            ):  # Match each leg with the IMU according to IMUConfig
                 manager = sensor_managers[idx]
                 if (
                     not left_init
-                    and manager.i2c_id == IMUConfig.left_leg_bus
-                    and manager.imu_descriptor == IMUConfig.left_leg_descr
+                    and manager.i2c_id == self.config.imu_cfg.left_leg_bus
+                    and manager.imu_descriptor == self.config.imu_cfg.left_leg_descr
                 ):
                     self.imu_left = manager
                     left_init = True
                     continue
                 if (
-                    manager.i2c_id == IMUConfig.right_leg_bus
-                    and manager.imu_descriptor == IMUConfig.right_leg_descr
+                    manager.i2c_id == self.config.imu_cfg.right_leg_bus
+                    and manager.imu_descriptor == self.config.imu_cfg.right_leg_descr
                 ):
                     self.imu_right = manager
                     right_init = True
