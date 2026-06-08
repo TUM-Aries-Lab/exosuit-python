@@ -6,7 +6,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 import numpy as np
-from imu_python.definitions import IMUDescriptor
+from imu_python.definitions import I2CBusID, IMUDescriptor
 
 np.set_printoptions(precision=3, floatmode="fixed", suppress=True)
 
@@ -45,6 +45,8 @@ class LogLevel:
 DEFAULT_LOG_LEVEL = LogLevel.info
 DEFAULT_LOG_FILENAME = "log_file"
 
+DEFAULT_EXOSUIT_FREQUENCY_HZ = 100
+
 THREAD_JOIN_TIMEOUT = 2.0
 
 SWITCH_EVENT_HANDLER_INTERVAL = 0.5
@@ -65,14 +67,14 @@ class TensionConfig:
 class IMUConfig:
     """IMU configuration dataclass containing busID, IMU name and index for each leg."""
 
-    left_leg_bus: int = 7
+    left_leg_bus: int = I2CBusID.bus_7
     left_leg_descr: IMUDescriptor = field(
         default_factory=lambda: IMUDescriptor(name="MOCK", index=0)
     )
-    right_leg_bus: int = 7
+    right_leg_bus: int = I2CBusID.bus_7
     right_leg_descr: IMUDescriptor = field(
         default_factory=lambda: IMUDescriptor(name="MOCK", index=1)
-    )
+    )  # TODO: set actual IMUs
 
 
 # Switch pins
@@ -82,5 +84,5 @@ TENSION_SWITCH = 15  # TODO: placeholder
 GPIO_SWITCH_BOUNCETIME = 50  # TODO: test this threshold
 
 # switch signals
-SWITCH_ON = "FALLING"
+SWITCH_ON = "FALLING"  # TODO: wiring
 SWITCH_OFF = "RISING"

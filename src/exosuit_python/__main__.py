@@ -11,7 +11,7 @@ from exosuit_python.definitions import (
     TENSION_SWITCH,
     LogLevel,
 )
-from exosuit_python.exosuit import GPIO, Exosuit, ExosuitConfig
+from exosuit_python.exosuit import Exosuit, ExosuitConfig
 from exosuit_python.gpio import MockGPIO
 from exosuit_python.utils import setup_logger
 
@@ -36,24 +36,24 @@ def main(log_level: str, stderr_level: str, mock: bool) -> None:  # pragma: no c
 
 def test_pipeline(exosuit: Exosuit) -> None:
     """Run the test pipeline."""
-    if isinstance(GPIO, MockGPIO):
+    if isinstance(exosuit.gpio, MockGPIO):
         # wait for initialization
-        time.sleep(5)
+        time.sleep(2)
         # activate pre-tensioning
         logger.info("Simulating tensioning switch ON...")
-        GPIO.simulate_switch(TENSION_SWITCH, exosuit.on_signal)
+        exosuit.gpio.simulate_switch(TENSION_SWITCH, exosuit.on_signal)
         time.sleep(1)
         # deactivate pre-tensioning
         logger.info("Simulating tensioning switch OFF...")
-        GPIO.simulate_switch(TENSION_SWITCH, exosuit.off_signal)
+        exosuit.gpio.simulate_switch(TENSION_SWITCH, exosuit.off_signal)
         time.sleep(2)
         # power on
         logger.info("Simulating power switch ON...")
-        GPIO.simulate_switch(POWER_SWITCH, exosuit.on_signal)
+        exosuit.gpio.simulate_switch(POWER_SWITCH, exosuit.on_signal)
         time.sleep(10)
         # power off
         logger.info("Simulating power switch OFF...")
-        GPIO.simulate_switch(POWER_SWITCH, exosuit.off_signal)
+        exosuit.gpio.simulate_switch(POWER_SWITCH, exosuit.off_signal)
         time.sleep(4)
 
 

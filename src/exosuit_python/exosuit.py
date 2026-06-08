@@ -11,9 +11,7 @@ try:
     from Jetson import GPIO
 except Exception:
     logger.warning("Jetson GPIO import failed. Are you running on the Jetson?")
-    from exosuit_python.gpio import MockGPIO
-
-    GPIO = MockGPIO()
+    GPIO = None
 from hip_controller.control.app import WalkOnController
 from hip_controller.definitions import SensorSignal
 from imu_python.factory import IMUFactory
@@ -32,6 +30,7 @@ from exosuit_python.definitions import (
     IMUConfig,
     TensionConfig,
 )
+from exosuit_python.gpio import MockGPIO
 from exosuit_python.motor import MockMotor
 from exosuit_python.utils import convert_rad_per_sec_to_rpm
 
@@ -65,6 +64,13 @@ class Exosuit:
         """
         self.config: ExosuitConfig = config
 
+        if self.config.mock:
+            self.gpio = MockGPIO()
+        elif GPIO is None:
+            self.gpio = MockGPIO()
+        else:
+            self.gpio = GPIO
+
         self._status: ExosuitStates = ExosuitStates.INITIALIZING
         self._power_switch: bool = False
         self._tension_switch: bool = False
@@ -83,12 +89,12 @@ class Exosuit:
         self.motor_left: CubeMarsAK606v3 | MockMotor
         self.motor_right: CubeMarsAK606v3 | MockMotor
 
-        if not self.config.mock:
-            self.motor_left = CubeMarsAK606v3()
-            self.motor_right = CubeMarsAK606v3()
-        else:
+        if self.config.mock:
             self.motor_left = MockMotor()
             self.motor_right = MockMotor()
+        else:
+            self.motor_left = CubeMarsAK606v3()
+            self.motor_right = CubeMarsAK606v3()
 
         if not self._initialize_imus():
             logger.error("IMU initialization failed. Exosuit not started.")
@@ -96,46 +102,48 @@ class Exosuit:
         if not self._initialize_motors():
             logger.error("Motor initialization failed. Exosuit not started.")
             return
-        if hasattr(GPIO, SWITCH_ON) and hasattr(GPIO, SWITCH_OFF):
-            self.on_signal = getattr(GPIO, SWITCH_ON)
-            self.off_signal = getattr(GPIO, SWITCH_OFF)
+        if hasattr(self.gpio, SWITCH_ON) and hasattr(self.gpio, SWITCH_OFF):
+            self.on_signal = getattr(self.gpio, SWITCH_ON)
+            self.off_signal = getattr(self.gpio, SWITCH_OFF)
         else:
             logger.error(
                 f"GPIO signal attribute '{SWITCH_ON}' or '{SWITCH_OFF}' not found."
             )
             return
-        self._gpio_setup()
-        self._start()
+        if self._gpio_initialized():
+            self._start()
+        else:
+            logger.error("GPIO initialization failed. Exosuit not started.")
 
-    def _gpio_setup(self) -> bool:
+    def _gpio_initialized(self) -> bool:
         """Set up Jetson GPIO switches."""
         try:
-            GPIO.setmode(GPIO.BOARD)
-            GPIO.setup(POWER_SWITCH, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-            GPIO.setup(TENSION_SWITCH, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+            self.gpio.setmode(self.gpio.BOARD)
+            self.gpio.setup(POWER_SWITCH, self.gpio.IN, pull_up_down=self.gpio.PUD_UP)
+            self.gpio.setup(TENSION_SWITCH, self.gpio.IN, pull_up_down=self.gpio.PUD_UP)
 
-            GPIO.add_event_detect(
+            self.gpio.add_event_detect(
                 POWER_SWITCH,
                 self.on_signal,
                 callback=self._power_on_callback,
                 bouncetime=GPIO_SWITCH_BOUNCETIME,
             )
 
-            GPIO.add_event_detect(
+            self.gpio.add_event_detect(
                 POWER_SWITCH,
                 self.off_signal,
                 callback=self._power_off_callback,
                 bouncetime=GPIO_SWITCH_BOUNCETIME,
             )
 
-            GPIO.add_event_detect(
+            self.gpio.add_event_detect(
                 TENSION_SWITCH,
                 self.on_signal,
                 callback=self._tension_on_callback,
                 bouncetime=GPIO_SWITCH_BOUNCETIME,
             )
 
-            GPIO.add_event_detect(
+            self.gpio.add_event_detect(
                 TENSION_SWITCH,
                 self.off_signal,
                 callback=self._tension_off_callback,
@@ -143,8 +151,8 @@ class Exosuit:
             )
             return True
         except Exception as err:
-            logger.error(f"Jetson GPIO init failure: {err}")
-            GPIO.cleanup()
+            logger.error(f"GPIO init failure: {err}")
+            self.gpio.cleanup()
             return False
 
     def _switch_event_handler(
@@ -212,7 +220,7 @@ class Exosuit:
         """Clean up the soft exoskeleton."""
         logger.info("Cleaning up exosuit.")
         self._status = ExosuitStates.STOPPED
-        GPIO.cleanup()
+        self.gpio.cleanup()
         self.imu_left.stop()
         self.imu_right.stop()
         self.motor_left.close()
