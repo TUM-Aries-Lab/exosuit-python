@@ -1,5 +1,7 @@
 """Mock motor for CI testing."""
 
+from loguru import logger
+
 
 class MockMotor:
     """Mock motor class."""
@@ -9,6 +11,7 @@ class MockMotor:
 
     def set_velocity(self, velocity_erpm: int) -> None:
         """Set mock motor velocity."""
+        logger.debug(f"Velocity set: {velocity_erpm}")
         pass
 
     def close(self) -> None:

@@ -37,7 +37,14 @@ from exosuit_python.utils import convert_rad_per_sec_to_rpm
 
 @dataclass
 class ExosuitConfig:
-    """Exosuit configuration."""
+    """Exosuit configuration.
+
+    Attributes:
+        frequency: Exosuit frequency in Hz.
+        mock: flag to use mock devices.
+        imu_cfg: IMU config that defines the IMU to use for each leg.
+
+    """
 
     frequency: float
     mock: bool = False
@@ -63,18 +70,27 @@ class Exosuit:
         :param config: Exosuit configuration
         """
         self.config: ExosuitConfig = config
+        self._status: ExosuitStates = ExosuitStates.INITIALIZING
 
-        if self.config.mock:
-            self.gpio = MockGPIO()
-        elif GPIO is None:
+        # GPIO for switches
+        if self.config.mock or GPIO is None:
             self.gpio = MockGPIO()
         else:
             self.gpio = GPIO
 
-        self._status: ExosuitStates = ExosuitStates.INITIALIZING
+        if hasattr(self.gpio, SWITCH_ON) and hasattr(self.gpio, SWITCH_OFF):
+            self.on_signal = getattr(self.gpio, SWITCH_ON)
+            self.off_signal = getattr(self.gpio, SWITCH_OFF)
+        else:
+            logger.error(
+                f"GPIO signal attribute '{SWITCH_ON}' or '{SWITCH_OFF}' not found."
+            )
+            return
+
         self._power_switch: bool = False
         self._tension_switch: bool = False
 
+        # main loop thread and switch handler thread
         self.thread: threading.Thread = threading.Thread(target=self._loop, daemon=True)
         self.switch_thread: threading.Thread = threading.Thread(
             target=self._switch_event_handler, daemon=True
@@ -96,27 +112,24 @@ class Exosuit:
             self.motor_left = CubeMarsAK606v3()
             self.motor_right = CubeMarsAK606v3()
 
+        # initialization calls
         if not self._initialize_imus():
             logger.error("IMU initialization failed. Exosuit not started.")
             return
         if not self._initialize_motors():
             logger.error("Motor initialization failed. Exosuit not started.")
             return
-        if hasattr(self.gpio, SWITCH_ON) and hasattr(self.gpio, SWITCH_OFF):
-            self.on_signal = getattr(self.gpio, SWITCH_ON)
-            self.off_signal = getattr(self.gpio, SWITCH_OFF)
-        else:
-            logger.error(
-                f"GPIO signal attribute '{SWITCH_ON}' or '{SWITCH_OFF}' not found."
-            )
-            return
-        if self._gpio_initialized():
+
+        if self._initialize_gpio():
             self._start()
         else:
             logger.error("GPIO initialization failed. Exosuit not started.")
 
-    def _gpio_initialized(self) -> bool:
-        """Set up Jetson GPIO switches."""
+    def _initialize_gpio(self) -> bool:
+        """Initialize and set up Jetson GPIO switches.
+
+        :return: True if successful, False otherwise
+        """
         try:
             self.gpio.setmode(self.gpio.BOARD)
             self.gpio.setup(POWER_SWITCH, self.gpio.IN, pull_up_down=self.gpio.PUD_UP)
@@ -158,7 +171,10 @@ class Exosuit:
     def _switch_event_handler(
         self,
     ) -> None:  # TODO: implement proper state machine if needed
-        """Monitor switch states and handle exosuit status changes."""
+        """Monitor switch states and handle exosuit status changes.
+
+        :return: None
+        """
         while self._status != ExosuitStates.STOPPED:
             if self._status == ExosuitStates.STANDBY:
                 if self._power_switch and not self._tension_switch:
@@ -179,7 +195,10 @@ class Exosuit:
             time.sleep(SWITCH_EVENT_HANDLER_INTERVAL)
 
     def _pretension(self) -> None:
-        """Pretension the tendons by turning the motors."""
+        """Pretension the tendons by turning the motors.
+
+        :return: None
+        """
         self.motor_left.set_velocity(TensionConfig.tensioning_velocity)
         # TODO: right motor
 
@@ -196,7 +215,10 @@ class Exosuit:
         self._tension_switch = False
 
     def _start(self) -> None:
-        """Start the IMUs and Motors."""
+        """Start the IMUs and Motors.
+
+        :return: None
+        """
         logger.info(f"Starting Exosuit at '{self.config.frequency}' Hz.")
         try:
             logger.debug("Starting IMUs")
@@ -217,7 +239,10 @@ class Exosuit:
             self._cleanup()
 
     def _cleanup(self) -> None:
-        """Clean up the soft exoskeleton."""
+        """Clean up the soft exoskeleton.
+
+        :return: None
+        """
         logger.info("Cleaning up exosuit.")
         self._status = ExosuitStates.STOPPED
         self.gpio.cleanup()
@@ -231,7 +256,10 @@ class Exosuit:
         logger.success("Exosuit shutdown.")
 
     def _loop(self) -> None:
-        """Run main control loop."""
+        """Run main control loop.
+
+        :return: None
+        """
         while True:
             while self._status == ExosuitStates.RUNNING:
                 try:
@@ -276,7 +304,9 @@ class Exosuit:
             while self._status == ExosuitStates.PRETENSIONING:
                 try:
                     # TODO right motor
-                    left_motor_torque = 0.85  # place holder, get real torque here
+                    left_motor_torque = (
+                        0.85  # TODO place holder, get actual torque here
+                    )
                     if left_motor_torque >= TensionConfig.motor_torque_limit:
                         self.motor_left.set_velocity(0)
                         time.sleep(TensionConfig.tensioning_timeout)
