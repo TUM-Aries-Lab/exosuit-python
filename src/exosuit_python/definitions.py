@@ -59,8 +59,8 @@ class TensionConfig:
 
     tensioning_velocity: int = 3
     motor_torque_limit: float = 0.85  # tensioned when motor_torque >= 0.85
-
     tensioning_timeout: float = 1.0  # in sec
+    torque_check_interval: float = 0.1  # in sec
 
 
 @dataclass(frozen=True)
@@ -84,5 +84,6 @@ TENSION_SWITCH = 15  # TODO: placeholder
 GPIO_SWITCH_BOUNCETIME = 50  # TODO: test this threshold
 
 # switch signals
-SWITCH_ON = "FALLING"  # TODO: wiring
-SWITCH_OFF = "RISING"
+SWITCH_ON = "HIGH"  # TODO: wiring
+SWITCH_OFF = "LOW"
+BOTH = "BOTH"

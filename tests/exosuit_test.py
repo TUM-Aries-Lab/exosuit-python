@@ -9,6 +9,7 @@ from exosuit_python.definitions import (
     SWITCH_EVENT_HANDLER_INTERVAL,
     TENSION_SWITCH,
     IMUConfig,
+    TensionConfig,
 )
 from exosuit_python.exosuit import Exosuit, ExosuitConfig, ExosuitStates
 from exosuit_python.gpio import MockGPIO
@@ -46,7 +47,7 @@ def test_exosuit_switches():
     assert exosuit._status == ExosuitStates.PRETENSIONING
     # simulate tension switch OFF
     exosuit.gpio.simulate_switch(TENSION_SWITCH, exosuit.off_signal)
-    time.sleep(state_wait)
+    time.sleep(state_wait + TensionConfig.tensioning_timeout)
     assert exosuit._status == ExosuitStates.STANDBY
     # simulate power switch ON
     exosuit.gpio.simulate_switch(POWER_SWITCH, exosuit.on_signal)

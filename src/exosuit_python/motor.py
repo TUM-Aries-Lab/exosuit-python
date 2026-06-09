@@ -22,7 +22,10 @@ class MockMotor:
         """Check if motor can communicate."""
         return True
 
-    def get_torque(self) -> int:
-        # TODO: make this function name/param identical to the motor implementation
+    def get_torque(
+        self,
+    ) -> (
+        int
+    ):  # TODO: make this function name/param identical to the motor implementation
         """Get the torque of the motor."""
-        return 0
+        return 0  # TODO: simulate real motor behavior

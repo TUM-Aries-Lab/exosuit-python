@@ -42,11 +42,11 @@ def test_pipeline(exosuit: Exosuit) -> None:
         # activate pre-tensioning
         logger.info("Simulating tensioning switch ON...")
         exosuit.gpio.simulate_switch(TENSION_SWITCH, exosuit.on_signal)
-        time.sleep(2)
+        time.sleep(1)
         # deactivate pre-tensioning
         logger.info("Simulating tensioning switch OFF...")
         exosuit.gpio.simulate_switch(TENSION_SWITCH, exosuit.off_signal)
-        time.sleep(2)
+        time.sleep(3)
         # power on
         logger.info("Simulating power switch ON...")
         exosuit.gpio.simulate_switch(POWER_SWITCH, exosuit.on_signal)

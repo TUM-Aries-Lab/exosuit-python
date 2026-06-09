@@ -19,6 +19,7 @@ from imu_python.sensor_manager import IMUManager
 from motor_python.cube_mars_motor import CubeMarsAK606v3
 
 from exosuit_python.definitions import (
+    BOTH,
     EXOSUIT_STANDBY_INTERVAL,
     GPIO_SWITCH_BOUNCETIME,
     POWER_SWITCH,
@@ -78,12 +79,17 @@ class Exosuit:
         else:
             self.gpio = GPIO
 
-        if hasattr(self.gpio, SWITCH_ON) and hasattr(self.gpio, SWITCH_OFF):
+        if (
+            hasattr(self.gpio, SWITCH_ON)
+            and hasattr(self.gpio, SWITCH_OFF)
+            and hasattr(self.gpio, BOTH)
+        ):
             self.on_signal = getattr(self.gpio, SWITCH_ON)
             self.off_signal = getattr(self.gpio, SWITCH_OFF)
+            self.both_signal = getattr(self.gpio, BOTH)
         else:
             logger.error(
-                f"GPIO signal attribute '{SWITCH_ON}' or '{SWITCH_OFF}' not found."
+                f"GPIO signal attribute '{SWITCH_ON}', '{SWITCH_OFF}', or '{BOTH}' not found."
             )
             return
 
@@ -137,31 +143,18 @@ class Exosuit:
 
             self.gpio.add_event_detect(
                 POWER_SWITCH,
-                self.on_signal,
-                callback=self._power_on_callback,
-                bouncetime=GPIO_SWITCH_BOUNCETIME,
-            )
-
-            self.gpio.add_event_detect(
-                POWER_SWITCH,
-                self.off_signal,
-                callback=self._power_off_callback,
+                self.both_signal,
+                callback=self._power_callback,
                 bouncetime=GPIO_SWITCH_BOUNCETIME,
             )
 
             self.gpio.add_event_detect(
                 TENSION_SWITCH,
-                self.on_signal,
-                callback=self._tension_on_callback,
+                self.both_signal,
+                callback=self._tension_callback,
                 bouncetime=GPIO_SWITCH_BOUNCETIME,
             )
 
-            self.gpio.add_event_detect(
-                TENSION_SWITCH,
-                self.off_signal,
-                callback=self._tension_off_callback,
-                bouncetime=GPIO_SWITCH_BOUNCETIME,
-            )
             return True
         except Exception as err:
             logger.error(f"GPIO init failure: {err}")
@@ -183,36 +176,33 @@ class Exosuit:
                 elif self._tension_switch and not self._power_switch:
                     logger.info("State change: standby -> pretensioning")
                     self._status = ExosuitStates.PRETENSIONING
-                    self._pretension()
             elif self._status == ExosuitStates.RUNNING:
                 if not self._power_switch:
                     logger.info("State change: running -> standby")
                     self._status = ExosuitStates.STANDBY
             elif self._status == ExosuitStates.PRETENSIONING:
-                if not self._tension_switch:
-                    logger.info("State change: pretensioning -> standby")
-                    self._status = ExosuitStates.STANDBY
+                pass  # state change handled in _loop()
             time.sleep(SWITCH_EVENT_HANDLER_INTERVAL)
 
-    def _pretension(self) -> None:
-        """Pretension the tendons by turning the motors.
+    def _power_callback(self, channel) -> None:
+        """Handle power switch states triggered by signal events."""
+        power_state = self.gpio.input(POWER_SWITCH)
+        if power_state == self.on_signal:
+            self._power_switch = True
+        elif power_state == self.off_signal:
+            self._power_switch = False
+        else:
+            logger.warning(f"Unrecognized power switch state: {power_state}")
 
-        :return: None
-        """
-        self.motor_left.set_velocity(TensionConfig.tensioning_velocity)
-        # TODO: right motor
-
-    def _power_on_callback(self, channel) -> None:
-        self._power_switch = True
-
-    def _power_off_callback(self, channel) -> None:
-        self._power_switch = False
-
-    def _tension_on_callback(self, channel) -> None:
-        self._tension_switch = True
-
-    def _tension_off_callback(self, channel) -> None:
-        self._tension_switch = False
+    def _tension_callback(self, channel) -> None:
+        """Handle tension switch states triggered by signal events."""
+        tension_state = self.gpio.input(TENSION_SWITCH)
+        if tension_state == self.on_signal:
+            self._tension_switch = True
+        elif tension_state == self.off_signal:
+            self._tension_switch = False
+        else:
+            logger.warning(f"Unrecognized tension switch state: {tension_state}")
 
     def _start(self) -> None:
         """Start the IMUs and Motors.
@@ -249,6 +239,7 @@ class Exosuit:
         self.imu_left.stop()
         self.imu_right.stop()
         self.motor_left.close()
+        self.motor_right.close()
         if self.thread is not None and self.thread.is_alive():
             self.thread.join(timeout=THREAD_JOIN_TIMEOUT)
         if self.switch_thread is not None and self.switch_thread.is_alive():
@@ -260,60 +251,82 @@ class Exosuit:
 
         :return: None
         """
-        while True:
+        while self._status != ExosuitStates.STOPPED:
             while self._status == ExosuitStates.RUNNING:
                 try:
-                    data_right = self.imu_right.get_data()
-                    data_left = self.imu_left.get_data()
-
-                    if data_right is None or data_left is None:
-                        raise TypeError
-
-                    timestamp_right = data_right.timestamp
-                    signal_right = SensorSignal(
-                        angle_rad=data_right.quat.to_euler(seq="xyz").z,
-                        velocity_rad_per_sec=data_right.device_data.gyro.z,
-                    )
-                    command_right = self.controller_right.step(
-                        timestamp=timestamp_right, curr_signal=signal_right
-                    )
-
-                    timestamp_left = data_left.timestamp
-                    signal_left = SensorSignal(
-                        angle_rad=data_left.quat.to_euler(seq="xyz").z,
-                        velocity_rad_per_sec=data_left.device_data.gyro.z,
-                    )
-                    command_left = self.controller_left.step(
-                        timestamp=timestamp_left, curr_signal=signal_left
-                    )
-
-                    self.motor_left.set_velocity(
-                        convert_rad_per_sec_to_rpm(command_left)
-                    )
-
-                    self.motor_left.set_velocity(
-                        convert_rad_per_sec_to_rpm(command_right)
-                    )
-
-                    time.sleep(1 / self.config.frequency)
+                    self._control()
                 except TypeError as err:
                     logger.error(f"Failed getting data from the IMU: '{err}'.")
                 except Exception as err:
                     logger.error(f"Exosuit control loop exception: '{err}'.")
 
+                time.sleep(1 / self.config.frequency)
+
             while self._status == ExosuitStates.PRETENSIONING:
                 try:
-                    # TODO right motor
-                    left_motor_torque = (
-                        0.85  # TODO place holder, get actual torque here
-                    )
-                    if left_motor_torque >= TensionConfig.motor_torque_limit:
-                        self.motor_left.set_velocity(0)
-                        time.sleep(TensionConfig.tensioning_timeout)
+                    self._pretension()
                 except Exception as err:
                     logger.error(f"Exosuit control loop exception: '{err}'.")
 
+                time.sleep(TensionConfig.torque_check_interval)
+
             time.sleep(EXOSUIT_STANDBY_INTERVAL)
+
+    def _control(self) -> None:
+        """Execute one iteration of control loop."""
+        data_right = self.imu_right.get_data()
+        data_left = self.imu_left.get_data()
+
+        if data_right is None or data_left is None:
+            raise TypeError
+
+        timestamp_right = data_right.timestamp
+        signal_right = SensorSignal(
+            angle_rad=data_right.quat.to_euler(seq="xyz").z,
+            velocity_rad_per_sec=data_right.device_data.gyro.z,
+        )
+        command_right = self.controller_right.step(
+            timestamp=timestamp_right, curr_signal=signal_right
+        )
+
+        timestamp_left = data_left.timestamp
+        signal_left = SensorSignal(
+            angle_rad=data_left.quat.to_euler(seq="xyz").z,
+            velocity_rad_per_sec=data_left.device_data.gyro.z,
+        )
+        command_left = self.controller_left.step(
+            timestamp=timestamp_left, curr_signal=signal_left
+        )
+
+        self.motor_left.set_velocity(convert_rad_per_sec_to_rpm(command_left))
+
+        self.motor_right.set_velocity(convert_rad_per_sec_to_rpm(command_right))
+
+    def _pretension(self) -> None:
+        """Execute one iteration of pretensioning loop."""
+        left_motor_torque = 0.85  # TODO place holder, get actual torque here
+        right_motor_torque = 0.85  # TODO place holder, get actual torque here
+
+        # Only apply velocity if motor hasn't reached threshold
+        if left_motor_torque < TensionConfig.motor_torque_limit:
+            self.motor_left.set_velocity(TensionConfig.tensioning_velocity)
+        else:
+            self.motor_left.set_velocity(0)
+
+        if right_motor_torque < TensionConfig.motor_torque_limit:
+            self.motor_right.set_velocity(TensionConfig.tensioning_velocity)
+        else:
+            self.motor_right.set_velocity(0)
+
+        # Exit pretensioning when both motors reach threshold and switch is released
+        if (
+            left_motor_torque >= TensionConfig.motor_torque_limit
+            and right_motor_torque >= TensionConfig.motor_torque_limit
+            and not self._tension_switch
+        ):
+            time.sleep(TensionConfig.tensioning_timeout)
+            logger.info("State change: pretensioning -> standby")
+            self._status = ExosuitStates.STANDBY
 
     def _initialize_imus(self) -> bool:
         """Initialize IMUs.
@@ -362,12 +375,15 @@ class Exosuit:
 
         :return: True if successful, False otherwise
         """
-        # TODO: right motor
         try:
+            communication_status = True
             if not self.motor_left.check_communication():
-                logger.error("Motor not responding. Check power and connections.")
-                return False
-            return True
+                logger.error("Left Motor not responding. Check power and connections.")
+                communication_status = False
+            if not self.motor_right.check_communication():
+                logger.error("Right Motor not responding. Check power and connections.")
+                communication_status = False
+            return communication_status
         except Exception as err:
             logger.error(f"Exosuit exception: '{err}'. Check Motor connections.")
             return False
