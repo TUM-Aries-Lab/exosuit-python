@@ -337,8 +337,7 @@ class Exosuit:
             left_init: bool = False
             right_init: bool = False
             sensor_managers = IMUFactory.detect_and_create(
-                free_threading=True,
-                log_data=False,
+                free_threading=True, log_data=False, create_mock=self.config.mock
             )
             detected_imus = len(sensor_managers)
             if detected_imus < 2:
