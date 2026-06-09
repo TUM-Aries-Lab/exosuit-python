@@ -67,7 +67,7 @@ class MockGPIO:
         self._threads.append(thread)
         thread.start()
 
-    def cleanup(self):
+    def cleanup(self) -> None:
         """Clean up GPIO."""
         self.gpio_running = False
         for thread in self._threads:
@@ -85,6 +85,7 @@ class MockGPIO:
         bouncetime: int | None = None,
         polltime: float = 0.2,
     ) -> None:
+        """Check for edge event and call callback function."""
         while self.gpio_running:
             current_state = self._channel_states.get(channel, 0)
             previous_state = self._previous_states.get(channel)

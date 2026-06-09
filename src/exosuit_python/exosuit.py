@@ -184,7 +184,7 @@ class Exosuit:
                 pass  # state change handled in _loop()
             time.sleep(SWITCH_EVENT_HANDLER_INTERVAL)
 
-    def _power_callback(self, channel) -> None:
+    def _power_callback(self, channel: int) -> None:
         """Handle power switch states triggered by signal events."""
         power_state = self.gpio.input(POWER_SWITCH)
         if power_state == self.on_signal:
@@ -194,7 +194,7 @@ class Exosuit:
         else:
             logger.warning(f"Unrecognized power switch state: {power_state}")
 
-    def _tension_callback(self, channel) -> None:
+    def _tension_callback(self, channel: int) -> None:
         """Handle tension switch states triggered by signal events."""
         tension_state = self.gpio.input(TENSION_SWITCH)
         if tension_state == self.on_signal:

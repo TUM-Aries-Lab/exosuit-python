@@ -83,7 +83,7 @@ TENSION_SWITCH = 15  # TODO: placeholder
 
 GPIO_SWITCH_BOUNCETIME = 50  # TODO: test this threshold
 
-# switch signals
+# switch signals - used as 'getattr' keys for GPIO
 SWITCH_ON = "HIGH"  # TODO: wiring
 SWITCH_OFF = "LOW"
 BOTH = "BOTH"
