@@ -2,6 +2,7 @@
 
 import threading
 import time
+import warnings
 from dataclasses import dataclass, field
 from enum import IntEnum
 
@@ -235,9 +236,15 @@ class Exosuit:
         """
         logger.info("Cleaning up exosuit.")
         self._status = ExosuitStates.STOPPED
-        self.gpio.cleanup()
-        self.imu_left.stop()
-        self.imu_right.stop()
+        with warnings.catch_warnings():
+            # suppress warning from GPIO when no channels has been set up
+            warnings.simplefilter("ignore", RuntimeWarning)
+            self.gpio.cleanup()
+        try:  # imu attributes can be unassigned in case of failure
+            self.imu_left.stop()
+            self.imu_right.stop()
+        except AttributeError:
+            pass
         self.motor_left.close()
         self.motor_right.close()
         if self.thread is not None and self.thread.is_alive():
@@ -284,19 +291,17 @@ class Exosuit:
         signal_right = SensorSignal(
             angle_rad=data_right.quat.to_euler(seq="xyz").z,
             velocity_rad_per_sec=data_right.device_data.gyro.z,
+            timestamp=timestamp_right,
         )
-        command_right = self.controller_right.step(
-            timestamp=timestamp_right, curr_signal=signal_right
-        )
+        command_right = self.controller_right.step(curr_signal=signal_right)
 
         timestamp_left = data_left.timestamp
         signal_left = SensorSignal(
             angle_rad=data_left.quat.to_euler(seq="xyz").z,
             velocity_rad_per_sec=data_left.device_data.gyro.z,
+            timestamp=timestamp_left,
         )
-        command_left = self.controller_left.step(
-            timestamp=timestamp_left, curr_signal=signal_left
-        )
+        command_left = self.controller_left.step(curr_signal=signal_left)
 
         self.motor_left.set_velocity(convert_rad_per_sec_to_rpm(command_left))
 
@@ -333,41 +338,40 @@ class Exosuit:
 
         :return: True if successful, False otherwise
         """
-        try:
-            left_init: bool = False
-            right_init: bool = False
+        left_init: bool = False
+        right_init: bool = False
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
             sensor_managers = IMUFactory.detect_and_create(
                 free_threading=True, log_data=False, create_mock=self.config.mock
             )
-            detected_imus = len(sensor_managers)
-            if detected_imus < 2:
-                raise ValueError(f"Wrong number of IMUs detected: {detected_imus} < 2")
-            for idx in range(
-                detected_imus
-            ):  # Match each leg with the IMU according to IMUConfig
-                manager = sensor_managers[idx]
-                if (
-                    not left_init
-                    and manager.i2c_id == self.config.imu_cfg.left_leg_bus
-                    and manager.imu_descriptor == self.config.imu_cfg.left_leg_descr
-                ):
-                    self.imu_left = manager
-                    left_init = True
-                    continue
-                if (
-                    manager.i2c_id == self.config.imu_cfg.right_leg_bus
-                    and manager.imu_descriptor == self.config.imu_cfg.right_leg_descr
-                ):
-                    self.imu_right = manager
-                    right_init = True
-            if not left_init:
-                raise RuntimeError("No detected IMUs matches left leg config")
-            if not right_init:
-                raise RuntimeError("No detected IMUs matches right leg config")
-            return True
-        except Exception as err:
-            logger.error(f"Exosuit exception: '{err}'. Check IMU connections.")
-            return False
+        detected_imus = len(sensor_managers)
+        if detected_imus < 2:
+            logger.error(f"Wrong number of IMUs detected: {detected_imus} < 2")
+        for idx in range(
+            detected_imus
+        ):  # Match each leg with the IMU according to IMUConfig
+            manager = sensor_managers[idx]
+            if (
+                not left_init
+                and manager.i2c_id == self.config.imu_cfg.left_leg_bus
+                and manager.imu_descriptor == self.config.imu_cfg.left_leg_descr
+            ):
+                self.imu_left = manager
+                left_init = True
+                continue
+            if (
+                manager.i2c_id == self.config.imu_cfg.right_leg_bus
+                and manager.imu_descriptor == self.config.imu_cfg.right_leg_descr
+            ):
+                self.imu_right = manager
+                right_init = True
+        if not left_init:
+            logger.error("No detected IMUs matches left leg config")
+        if not right_init:
+            logger.error("No detected IMUs matches right leg config")
+        return left_init and right_init
 
     def _initialize_motors(self) -> bool:
         """Initialize Motors.

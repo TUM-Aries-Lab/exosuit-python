@@ -13,7 +13,7 @@ dependencies = [
   "loguru>=0.7.3",
   "motor-python>=0.0.4",
   "imu-python>=0.1.2",
-  "hip-controller>=0.0.4",
+  "hip-controller>=0.1.1",
 ]
 
 [dependency-groups]
