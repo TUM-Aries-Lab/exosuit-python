@@ -11,12 +11,14 @@ from exosuit_python.definitions import (
     TENSION_SWITCH,
     LogLevel,
 )
-from exosuit_python.exosuit import Exosuit, ExosuitConfig
+from exosuit_python.exosuit import Exosuit, ExosuitConfig, ExosuitStates
 from exosuit_python.gpio import MockGPIO
 from exosuit_python.utils import setup_logger
 
 
-def main(log_level: str, stderr_level: str, mock: bool) -> None:  # pragma: no cover
+def main(
+    log_level: str, stderr_level: str, mock_devices: bool, test_gpio: bool
+) -> None:  # pragma: no cover
     """Run the main pipeline.
 
     :param log_level: The log level to use.
@@ -25,7 +27,9 @@ def main(log_level: str, stderr_level: str, mock: bool) -> None:  # pragma: no c
     """
     setup_logger(log_level=log_level, stderr_level=stderr_level)
 
-    config = ExosuitConfig(frequency=100, mock=mock)
+    config = ExosuitConfig(
+        frequency=100, mock_devices=mock_devices, test_gpio=test_gpio
+    )
     exosuit = Exosuit(config=config)
     try:
         while True:
@@ -55,6 +59,11 @@ def test_pipeline(exosuit: Exosuit) -> None:
         logger.info("Simulating power switch OFF...")
         exosuit.gpio.simulate_switch(POWER_SWITCH, exosuit.off_signal)
         time.sleep(4)
+    else:
+        if exosuit._status not in [ExosuitStates.INITIALIZING, ExosuitStates.STOPPED]:
+            power_state = exosuit.gpio.input(POWER_SWITCH)
+            logger.info(power_state)
+        time.sleep(0.2)
 
 
 if __name__ == "__main__":  # pragma: no cover
@@ -80,6 +89,16 @@ if __name__ == "__main__":  # pragma: no cover
         help="Use mock devices.",
         action="store_true",
     )
+    parser.add_argument(
+        "--gpio",
+        help="Test GPIO on the Jetson.",
+        action="store_true",
+    )
     args = parser.parse_args()
 
-    main(log_level=args.log_level, stderr_level=args.stderr_level, mock=args.mock)
+    main(
+        log_level=args.log_level,
+        stderr_level=args.stderr_level,
+        mock_devices=args.mock,
+        test_gpio=args.gpio,
+    )

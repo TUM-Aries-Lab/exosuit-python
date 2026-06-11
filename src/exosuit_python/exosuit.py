@@ -43,13 +43,15 @@ class ExosuitConfig:
 
     Attributes:
         frequency: Exosuit frequency in Hz.
-        mock: flag to use mock devices.
+        mock_devices: flag to use mock devices.
+        test_gpio: flag to use Jetson GPIO (for switch testing on the Jetson) and use mock_devices.
         imu_cfg: IMU config that defines the IMU to use for each leg.
 
     """
 
     frequency: float
-    mock: bool = False
+    mock_devices: bool = False
+    test_gpio: bool = False
     imu_cfg: IMUConfig = field(default_factory=IMUConfig)
 
 
@@ -75,7 +77,7 @@ class Exosuit:
         self._status: ExosuitStates = ExosuitStates.INITIALIZING
 
         # GPIO for switches
-        if self.config.mock or GPIO is None:
+        if GPIO is None or (not self.config.test_gpio and self.config.mock_devices):
             self.gpio = MockGPIO()
         else:
             self.gpio = GPIO
@@ -112,7 +114,7 @@ class Exosuit:
         self.motor_left: CubeMarsAK606v3 | MockMotor
         self.motor_right: CubeMarsAK606v3 | MockMotor
 
-        if self.config.mock:
+        if self.config.mock_devices or self.config.test_gpio:
             self.motor_left = MockMotor()
             self.motor_right = MockMotor()
         else:
@@ -139,8 +141,8 @@ class Exosuit:
         """
         try:
             self.gpio.setmode(self.gpio.BOARD)
-            self.gpio.setup(POWER_SWITCH, self.gpio.IN, pull_up_down=self.gpio.PUD_UP)
-            self.gpio.setup(TENSION_SWITCH, self.gpio.IN, pull_up_down=self.gpio.PUD_UP)
+            self.gpio.setup(POWER_SWITCH, self.gpio.IN)
+            self.gpio.setup(TENSION_SWITCH, self.gpio.IN)
 
             self.gpio.add_event_detect(
                 POWER_SWITCH,
@@ -344,7 +346,9 @@ class Exosuit:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", RuntimeWarning)
             sensor_managers = IMUFactory.detect_and_create(
-                free_threading=True, log_data=False, create_mock=self.config.mock
+                free_threading=True,
+                log_data=False,
+                create_mock=self.config.mock_devices or self.config.test_gpio,
             )
         detected_imus = len(sensor_managers)
         if detected_imus < 2:

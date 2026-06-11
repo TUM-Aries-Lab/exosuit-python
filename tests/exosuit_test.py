@@ -19,7 +19,7 @@ def test_exosuit_initialization():
     """Test if exosuit is initialized with the set config."""
     imu_config = IMUConfig()
     exosuit_config = ExosuitConfig(
-        frequency=DEFAULT_EXOSUIT_FREQUENCY_HZ, mock=True, imu_cfg=imu_config
+        frequency=DEFAULT_EXOSUIT_FREQUENCY_HZ, mock_devices=True, imu_cfg=imu_config
     )
     exosuit = Exosuit(exosuit_config)
 
@@ -31,7 +31,7 @@ def test_exosuit_switches():
     """Test if exosuit's state changes correctly upon switch triggers."""
     imu_config = IMUConfig()
     exosuit_config = ExosuitConfig(
-        frequency=DEFAULT_EXOSUIT_FREQUENCY_HZ, mock=True, imu_cfg=imu_config
+        frequency=DEFAULT_EXOSUIT_FREQUENCY_HZ, mock_devices=True, imu_cfg=imu_config
     )
     exosuit = Exosuit(exosuit_config)
 

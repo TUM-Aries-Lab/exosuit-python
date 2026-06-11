@@ -78,8 +78,8 @@ class IMUConfig:
 
 
 # Switch pins
-POWER_SWITCH = 7  # TODO: placeholder
-TENSION_SWITCH = 15  # TODO: placeholder
+POWER_SWITCH = 29
+TENSION_SWITCH = 31
 
 GPIO_SWITCH_BOUNCETIME = 50  # TODO: test this threshold
 
