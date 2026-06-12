@@ -9,9 +9,10 @@ from exosuit_python.definitions import (
     DEFAULT_LOG_LEVEL,
     POWER_SWITCH,
     TENSION_SWITCH,
+    ExosuitStates,
     LogLevel,
 )
-from exosuit_python.exosuit import Exosuit, ExosuitConfig, ExosuitStates
+from exosuit_python.exosuit import Exosuit, ExosuitConfig
 from exosuit_python.gpio import MockGPIO
 from exosuit_python.utils import setup_logger
 

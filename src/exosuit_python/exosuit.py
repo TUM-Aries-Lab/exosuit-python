@@ -4,7 +4,6 @@ import threading
 import time
 import warnings
 from dataclasses import dataclass, field
-from enum import IntEnum
 
 from loguru import logger
 
@@ -23,13 +22,17 @@ from exosuit_python.definitions import (
     BOTH,
     EXOSUIT_STANDBY_INTERVAL,
     GPIO_SWITCH_BOUNCETIME,
+    MODE_SWITCH_1,
+    MODE_SWITCH_2,
+    MODE_SWITCH_LOGIC,
     POWER_SWITCH,
     SWITCH_EVENT_HANDLER_INTERVAL,
-    SWITCH_OFF,
-    SWITCH_ON,
     TENSION_SWITCH,
     THREAD_JOIN_TIMEOUT,
+    ExosuitStates,
     IMUConfig,
+    InclinationModes,
+    SwitchStates,
     TensionConfig,
 )
 from exosuit_python.gpio import MockGPIO
@@ -55,16 +58,6 @@ class ExosuitConfig:
     imu_cfg: IMUConfig = field(default_factory=IMUConfig)
 
 
-class ExosuitStates(IntEnum):
-    """Enum for exosuit states."""
-
-    INITIALIZING = 0
-    STANDBY = 1
-    PRETENSIONING = 2
-    RUNNING = 3
-    STOPPED = 4
-
-
 class Exosuit:
     """Tendon-based soft exoskeleton."""
 
@@ -83,16 +76,16 @@ class Exosuit:
             self.gpio = GPIO
 
         if (
-            hasattr(self.gpio, SWITCH_ON)
-            and hasattr(self.gpio, SWITCH_OFF)
+            hasattr(self.gpio, SwitchStates.ON)
+            and hasattr(self.gpio, SwitchStates.OFF)
             and hasattr(self.gpio, BOTH)
         ):
-            self.on_signal = getattr(self.gpio, SWITCH_ON)
-            self.off_signal = getattr(self.gpio, SWITCH_OFF)
+            self.on_signal = getattr(self.gpio, SwitchStates.ON)
+            self.off_signal = getattr(self.gpio, SwitchStates.OFF)
             self.both_signal = getattr(self.gpio, BOTH)
         else:
             logger.error(
-                f"GPIO signal attribute '{SWITCH_ON}', '{SWITCH_OFF}', or '{BOTH}' not found."
+                f"GPIO signal attribute '{SwitchStates.ON}', '{SwitchStates.OFF}', or '{BOTH}' not found."
             )
             return
 
@@ -104,6 +97,7 @@ class Exosuit:
         self.switch_thread: threading.Thread = threading.Thread(
             target=self._switch_event_handler, daemon=True
         )
+        self.inclination_mode: InclinationModes
 
         self.imu_left: IMUManager
         self.imu_right: IMUManager
@@ -143,6 +137,8 @@ class Exosuit:
             self.gpio.setmode(self.gpio.BOARD)
             self.gpio.setup(POWER_SWITCH, self.gpio.IN)
             self.gpio.setup(TENSION_SWITCH, self.gpio.IN)
+            self.gpio.setup(MODE_SWITCH_1, self.gpio.IN)
+            self.gpio.setup(MODE_SWITCH_2, self.gpio.IN)
 
             self.gpio.add_event_detect(
                 POWER_SWITCH,
@@ -185,6 +181,21 @@ class Exosuit:
                     self._status = ExosuitStates.STANDBY
             elif self._status == ExosuitStates.PRETENSIONING:
                 pass  # state change handled in _loop()
+
+            switch_1 = (
+                SwitchStates.ON
+                if self.gpio.input(MODE_SWITCH_1) == self.on_signal
+                else SwitchStates.OFF
+            )
+            switch_2 = (
+                SwitchStates.ON
+                if self.gpio.input(MODE_SWITCH_2) == self.on_signal
+                else SwitchStates.OFF
+            )
+            mode = self._get_mode(switch_1=switch_1, switch_2=switch_2)
+            if mode is not None:
+                self.inclination_mode = mode
+
             time.sleep(SWITCH_EVENT_HANDLER_INTERVAL)
 
     def _power_callback(self, channel: int) -> None:
@@ -221,6 +232,7 @@ class Exosuit:
             logger.debug("Starting Motors")
             logger.debug("Starting Controller")
 
+            # TODO: get mode
             self._status = ExosuitStates.STANDBY
             logger.info("Exosuit status: standby")
             # Start main control loop
@@ -394,3 +406,18 @@ class Exosuit:
         except Exception as err:
             logger.error(f"Exosuit exception: '{err}'. Check Motor connections.")
             return False
+
+    def _get_mode(
+        self, switch_1: SwitchStates, switch_2: SwitchStates
+    ) -> InclinationModes | None:
+        """Get inclination mode based on the current switch states. Return None if unrecognized.
+
+        :param switch_1: state of the first channel of the switch.
+        :param switch_2: state of the second channel of the switch.
+        :return: the matched inclination mode, or None if unrecognized.
+        """
+        for mode, state in MODE_SWITCH_LOGIC.items():
+            if switch_1 == state.switch_1 and switch_2 == state.switch_2:
+                return mode
+
+        return None

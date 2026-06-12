@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
+from enum import IntEnum, StrEnum
 from pathlib import Path
 
 import numpy as np
@@ -80,10 +81,61 @@ class IMUConfig:
 # Switch pins
 POWER_SWITCH = 29
 TENSION_SWITCH = 31
+MODE_SWITCH_1 = 32
+MODE_SWITCH_2 = 33
 
 GPIO_SWITCH_BOUNCETIME = 50  # TODO: test this threshold
 
+
 # switch signals - used as 'getattr' keys for GPIO
-SWITCH_ON = "HIGH"  # TODO: wiring
-SWITCH_OFF = "LOW"
+class SwitchStates(StrEnum):
+    """Enum to match switch states with electrical signals."""
+
+    ON = "HIGH"
+    OFF = "LOW"
+
+
 BOTH = "BOTH"
+
+
+class ExosuitStates(IntEnum):
+    """Enum for exosuit states."""
+
+    INITIALIZING = 0
+    STANDBY = 1
+    PRETENSIONING = 2
+    RUNNING = 3
+    STOPPED = 4
+
+
+class InclinationModes(IntEnum):
+    """Enum for operation modes for different inclinations."""
+
+    LEVEL_GROUND = 0
+    UPHILL = 1
+    DOWNHILL = 2
+
+
+@dataclass
+class ModeSwitchStates:
+    """Data class representing the states of the mode switch."""
+
+    switch_1: SwitchStates
+    switch_2: SwitchStates
+
+
+# mode switch wiring:
+MODE_SWITCH_LOGIC: dict[InclinationModes, ModeSwitchStates] = {
+    InclinationModes.UPHILL: ModeSwitchStates(
+        switch_1=SwitchStates.ON,
+        switch_2=SwitchStates.OFF,
+    ),
+    InclinationModes.DOWNHILL: ModeSwitchStates(
+        switch_1=SwitchStates.OFF,
+        switch_2=SwitchStates.ON,
+    ),
+    InclinationModes.LEVEL_GROUND: ModeSwitchStates(
+        switch_1=SwitchStates.OFF,
+        switch_2=SwitchStates.OFF,
+    ),
+}
