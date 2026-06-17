@@ -7,7 +7,10 @@ from loguru import logger
 
 from exosuit_python.definitions import (
     DEFAULT_LOG_LEVEL,
-    POWER_SWITCH,
+    MODE_SWITCH_1,
+    MODE_SWITCH_2,
+    MODE_SWITCH_LOGIC,
+    OPERATION_SWITCH,
     TENSION_SWITCH,
     ExosuitStates,
     LogLevel,
@@ -52,18 +55,25 @@ def test_pipeline(exosuit: Exosuit) -> None:
         logger.info("Simulating tensioning switch OFF...")
         exosuit.gpio.simulate_switch(TENSION_SWITCH, exosuit.off_signal)
         time.sleep(3)
-        # power on
-        logger.info("Simulating power switch ON...")
-        exosuit.gpio.simulate_switch(POWER_SWITCH, exosuit.on_signal)
-        time.sleep(10)
-        # power off
-        logger.info("Simulating power switch OFF...")
-        exosuit.gpio.simulate_switch(POWER_SWITCH, exosuit.off_signal)
+        # start operation
+        logger.info("Simulating operation switch ON...")
+        exosuit.gpio.simulate_switch(OPERATION_SWITCH, exosuit.on_signal)
+        time.sleep(2)
+        for mode, state in MODE_SWITCH_LOGIC.items():
+            logger.info(f"Simulating mode {mode.name}...")
+            switch_1 = getattr(exosuit.gpio, state.switch_1)
+            switch_2 = getattr(exosuit.gpio, state.switch_2)
+            exosuit.gpio.simulate_switch(MODE_SWITCH_1, switch_1)
+            exosuit.gpio.simulate_switch(MODE_SWITCH_2, switch_2)
+            time.sleep(2)
+        # stop operation
+        logger.info("Simulating operation switch OFF...")
+        exosuit.gpio.simulate_switch(OPERATION_SWITCH, exosuit.off_signal)
         time.sleep(4)
     else:
         if exosuit._status not in [ExosuitStates.INITIALIZING, ExosuitStates.STOPPED]:
-            power_state = exosuit.gpio.input(POWER_SWITCH)
-            logger.info(power_state)
+            operation_state = exosuit.gpio.input(OPERATION_SWITCH)
+            logger.info(operation_state)
         time.sleep(0.2)
 
 

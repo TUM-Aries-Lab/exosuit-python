@@ -7,6 +7,12 @@ from enum import IntEnum, StrEnum
 from pathlib import Path
 
 import numpy as np
+from hip_controller.control.motor_reference_control.amplitude_modulation import (
+    AscendStairsMode,
+    DescendStairsMode,
+    LevelGroundMode,
+    ModeStrategy,
+)
 from imu_python.definitions import I2CBusID, IMUDescriptor
 
 np.set_printoptions(precision=3, floatmode="fixed", suppress=True)
@@ -79,7 +85,7 @@ class IMUConfig:
 
 
 # Switch pins
-POWER_SWITCH = 29
+OPERATION_SWITCH = 29
 TENSION_SWITCH = 31
 MODE_SWITCH_1 = 32
 MODE_SWITCH_2 = 33
@@ -123,6 +129,12 @@ class ModeSwitchStates:
     switch_1: SwitchStates
     switch_2: SwitchStates
 
+
+controller_modes: dict[InclinationModes, ModeStrategy] = {
+    InclinationModes.UPHILL: AscendStairsMode(),
+    InclinationModes.DOWNHILL: DescendStairsMode(),
+    InclinationModes.LEVEL_GROUND: LevelGroundMode(),
+}
 
 # mode switch wiring:
 MODE_SWITCH_LOGIC: dict[InclinationModes, ModeSwitchStates] = {

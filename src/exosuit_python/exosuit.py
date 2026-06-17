@@ -25,7 +25,7 @@ from exosuit_python.definitions import (
     MODE_SWITCH_1,
     MODE_SWITCH_2,
     MODE_SWITCH_LOGIC,
-    POWER_SWITCH,
+    OPERATION_SWITCH,
     SWITCH_EVENT_HANDLER_INTERVAL,
     TENSION_SWITCH,
     THREAD_JOIN_TIMEOUT,
@@ -34,6 +34,7 @@ from exosuit_python.definitions import (
     InclinationModes,
     SwitchStates,
     TensionConfig,
+    controller_modes,
 )
 from exosuit_python.gpio import MockGPIO
 from exosuit_python.motor import MockMotor
@@ -89,7 +90,7 @@ class Exosuit:
             )
             return
 
-        self._power_switch: bool = False
+        self._operation_switch: bool = False
         self._tension_switch: bool = False
 
         # main loop thread and switch handler thread
@@ -97,7 +98,8 @@ class Exosuit:
         self.switch_thread: threading.Thread = threading.Thread(
             target=self._switch_event_handler, daemon=True
         )
-        self.inclination_mode: InclinationModes
+        self.inclination_mode: InclinationModes = InclinationModes.LEVEL_GROUND
+        self._prev_inclination_mode: InclinationModes = InclinationModes.LEVEL_GROUND
 
         self.imu_left: IMUManager
         self.imu_right: IMUManager
@@ -135,15 +137,15 @@ class Exosuit:
         """
         try:
             self.gpio.setmode(self.gpio.BOARD)
-            self.gpio.setup(POWER_SWITCH, self.gpio.IN)
+            self.gpio.setup(OPERATION_SWITCH, self.gpio.IN)
             self.gpio.setup(TENSION_SWITCH, self.gpio.IN)
             self.gpio.setup(MODE_SWITCH_1, self.gpio.IN)
             self.gpio.setup(MODE_SWITCH_2, self.gpio.IN)
 
             self.gpio.add_event_detect(
-                POWER_SWITCH,
+                OPERATION_SWITCH,
                 self.both_signal,
-                callback=self._power_callback,
+                callback=self._operation_callback,
                 bouncetime=GPIO_SWITCH_BOUNCETIME,
             )
 
@@ -169,14 +171,14 @@ class Exosuit:
         """
         while self._status != ExosuitStates.STOPPED:
             if self._status == ExosuitStates.STANDBY:
-                if self._power_switch and not self._tension_switch:
+                if self._operation_switch and not self._tension_switch:
                     logger.info("State change: standby -> running")
                     self._status = ExosuitStates.RUNNING
-                elif self._tension_switch and not self._power_switch:
+                elif self._tension_switch and not self._operation_switch:
                     logger.info("State change: standby -> pretensioning")
                     self._status = ExosuitStates.PRETENSIONING
             elif self._status == ExosuitStates.RUNNING:
-                if not self._power_switch:
+                if not self._operation_switch:
                     logger.info("State change: running -> standby")
                     self._status = ExosuitStates.STANDBY
             elif self._status == ExosuitStates.PRETENSIONING:
@@ -198,15 +200,15 @@ class Exosuit:
 
             time.sleep(SWITCH_EVENT_HANDLER_INTERVAL)
 
-    def _power_callback(self, channel: int) -> None:
-        """Handle power switch states triggered by signal events."""
-        power_state = self.gpio.input(POWER_SWITCH)
-        if power_state == self.on_signal:
-            self._power_switch = True
-        elif power_state == self.off_signal:
-            self._power_switch = False
+    def _operation_callback(self, channel: int) -> None:
+        """Handle operation switch states triggered by signal events."""
+        opration_state = self.gpio.input(OPERATION_SWITCH)
+        if opration_state == self.on_signal:
+            self._operation_switch = True
+        elif opration_state == self.off_signal:
+            self._operation_switch = False
         else:
-            logger.warning(f"Unrecognized power switch state: {power_state}")
+            logger.warning(f"Unrecognized operation switch state: {opration_state}")
 
     def _tension_callback(self, channel: int) -> None:
         """Handle tension switch states triggered by signal events."""
@@ -297,6 +299,15 @@ class Exosuit:
         """Execute one iteration of control loop."""
         data_right = self.imu_right.get_data()
         data_left = self.imu_left.get_data()
+
+        if self._prev_inclination_mode != self.inclination_mode:
+            logger.info(
+                f"Mode change:{self._prev_inclination_mode.name} -> {self.inclination_mode.name}"
+            )
+            self.controller_left.amplitude_modulation.set_mode(
+                controller_modes[self.inclination_mode]
+            )
+            self._prev_inclination_mode = self.inclination_mode
 
         if data_right is None or data_left is None:
             raise TypeError

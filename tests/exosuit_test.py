@@ -8,7 +8,7 @@ from exosuit_python.definitions import (
     MODE_SWITCH_1,
     MODE_SWITCH_2,
     MODE_SWITCH_LOGIC,
-    POWER_SWITCH,
+    OPERATION_SWITCH,
     SWITCH_EVENT_HANDLER_INTERVAL,
     TENSION_SWITCH,
     IMUConfig,
@@ -52,12 +52,12 @@ def test_exosuit_switches():
     exosuit.gpio.simulate_switch(TENSION_SWITCH, exosuit.off_signal)
     time.sleep(state_wait + TensionConfig.tensioning_timeout)
     assert exosuit._status == ExosuitStates.STANDBY
-    # simulate power switch ON
-    exosuit.gpio.simulate_switch(POWER_SWITCH, exosuit.on_signal)
+    # simulate operation switch ON
+    exosuit.gpio.simulate_switch(OPERATION_SWITCH, exosuit.on_signal)
     time.sleep(state_wait)
     assert exosuit._status == ExosuitStates.RUNNING
-    # simulate power switch OFF
-    exosuit.gpio.simulate_switch(POWER_SWITCH, exosuit.off_signal)
+    # simulate operation switch OFF
+    exosuit.gpio.simulate_switch(OPERATION_SWITCH, exosuit.off_signal)
     time.sleep(state_wait)
     assert exosuit._status == ExosuitStates.STANDBY
 
