@@ -264,3 +264,28 @@ def test_both_switches_are_recorded():
     assert (rows[1][tension], rows[1][operation]) == (0.0, 1.0)
 
     exosuit._cleanup()
+
+
+def test_a_switch_edge_signals_the_handler():
+    """The callbacks signal the handler instead of letting it poll for the flag.
+
+    The handler is stopped first, deliberately. The event is a one-shot the
+    handler consumes -- it wakes, clears, and carries on -- so asserting on it
+    while that thread is live tests which of the two ran first, not whether the
+    callback signalled. An earlier version of this test did exactly that and
+    failed on all three Python versions.
+
+    The latency this buys is not asserted here: it depends on MockGPIO's own
+    0.2 s edge-detection poll and on CI runner load. See the PR for the
+    measurement.
+    """
+    exosuit = _mock_exosuit(record=False)
+    exosuit._cleanup()  # stops the handler, so nothing consumes the event
+
+    exosuit._switch_event.clear()
+    exosuit._operation_callback(OPERATION_SWITCH)
+    assert exosuit._switch_event.is_set()
+
+    exosuit._switch_event.clear()
+    exosuit._tension_callback(TENSION_SWITCH)
+    assert exosuit._switch_event.is_set()

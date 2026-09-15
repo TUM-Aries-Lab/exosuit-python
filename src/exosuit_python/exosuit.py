@@ -99,6 +99,12 @@ class Exosuit:
         self._operation_switch: bool = False
         self._tension_switch: bool = False
 
+        # Set by the GPIO callbacks so the switch handler reacts to an edge
+        # instead of discovering it on its next poll. The handler still wakes on
+        # a timeout as well, because the mode switches are polled rather than
+        # edge-detected -- see _switch_event_handler.
+        self._switch_event: threading.Event = threading.Event()
+
         # main loop thread and switch handler thread
         self.thread: threading.Thread = threading.Thread(target=self._loop, daemon=True)
         self.switch_thread: threading.Thread = threading.Thread(
@@ -223,7 +229,16 @@ class Exosuit:
             if mode is not None:
                 self.inclination_mode = mode
 
-            time.sleep(SWITCH_EVENT_HANDLER_INTERVAL)
+            # Wake on the next switch edge, or on the timeout -- whichever comes
+            # first. The timeout is what keeps the mode switches working: they
+            # have no add_event_detect registered, so MODE_SWITCH_1/2 are read
+            # by polling above and still need a periodic pass.
+            #
+            # An edge that arrives during the handling above is not missed: the
+            # callback has already set the event, so wait() returns at once and
+            # the next pass sees the new flag.
+            self._switch_event.wait(timeout=SWITCH_EVENT_HANDLER_INTERVAL)
+            self._switch_event.clear()
 
     def _operation_callback(self, channel: int) -> None:
         """Handle operation switch states triggered by signal events."""
@@ -235,6 +250,8 @@ class Exosuit:
         else:
             logger.warning(f"Unrecognized operation switch state: {opration_state}")
 
+        self._switch_event.set()
+
     def _tension_callback(self, channel: int) -> None:
         """Handle tension switch states triggered by signal events."""
         tension_state = self.gpio.input(TENSION_SWITCH)
@@ -244,6 +261,8 @@ class Exosuit:
             self._tension_switch = False
         else:
             logger.warning(f"Unrecognized tension switch state: {tension_state}")
+
+        self._switch_event.set()
 
     def _start(self) -> None:
         """Start the IMUs and Motors.
@@ -279,6 +298,8 @@ class Exosuit:
         """
         logger.info("Cleaning up exosuit.")
         self._status = ExosuitStates.STOPPED
+        # Wake the handler so it sees STOPPED now rather than after its timeout.
+        self._switch_event.set()
         with warnings.catch_warnings():
             # suppress warning from GPIO when no channels has been set up
             warnings.simplefilter("ignore", RuntimeWarning)
