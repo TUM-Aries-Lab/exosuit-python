@@ -7,12 +7,6 @@ from enum import IntEnum, StrEnum
 from pathlib import Path
 
 import numpy as np
-from hip_controller.control.motor_reference_control.amplitude_modulation import (
-    AscendStairsMode,
-    DescendStairsMode,
-    LevelGroundMode,
-    ModeStrategy,
-)
 from imu_python.definitions import I2CBusID, IMUDescriptor
 
 np.set_printoptions(precision=3, floatmode="fixed", suppress=True)
@@ -130,10 +124,26 @@ class ModeSwitchStates:
     switch_2: SwitchStates
 
 
-controller_modes: dict[InclinationModes, ModeStrategy] = {
-    InclinationModes.UPHILL: AscendStairsMode(),
-    InclinationModes.DOWNHILL: DescendStairsMode(),
-    InclinationModes.LEVEL_GROUND: LevelGroundMode(),
+# Inclination mode -> hip-controller locomotion class_id.
+#
+# `WalkOnController.set_locomotion_mode(class_id)` fans one integer out across
+# the whole controller: amplitude parameters, the per-mode SOGI-FLL tuning, and
+# the motion-mapping table. It replaces reaching into
+# `controller.amplitude_modulation.set_mode(...)`, which only retuned the first
+# of those three.
+#
+# The mode switches select the locomotion mode by hand -- the same thing the
+# TCN classifier produces automatically in the LocomotionMode project -- so
+# UPHILL means stair ascent here, not a ramp. The `InclinationModes` names
+# predate that usage.
+#
+# The values agree numerically with hip-controller's class_id today, but the
+# two enumerations live in different packages and are mapped explicitly so
+# either can be renumbered without silently changing which tuning is selected.
+LOCOMOTION_CLASS_IDS: dict[InclinationModes, int] = {
+    InclinationModes.LEVEL_GROUND: 0,
+    InclinationModes.UPHILL: 1,
+    InclinationModes.DOWNHILL: 2,
 }
 
 # mode switch wiring:
