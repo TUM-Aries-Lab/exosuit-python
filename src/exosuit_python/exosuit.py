@@ -304,9 +304,14 @@ class Exosuit:
             logger.info(
                 f"Mode change:{self._prev_inclination_mode.name} -> {self.inclination_mode.name}"
             )
-            self.controller_left.amplitude_modulation.set_mode(
-                controller_modes[self.inclination_mode]
-            )
+            # Both legs. Only the left one used to be retuned, so selecting
+            # uphill or downhill left the right leg on its construction default
+            # (level ground) for the rest of the session -- the two legs then
+            # assisted with different gains and sigmoid powers, which the wearer
+            # feels as an asymmetry rather than as a mode change.
+            mode = controller_modes[self.inclination_mode]
+            self.controller_left.amplitude_modulation.set_mode(mode)
+            self.controller_right.amplitude_modulation.set_mode(mode)
             self._prev_inclination_mode = self.inclination_mode
 
         if data_right is None or data_left is None:
