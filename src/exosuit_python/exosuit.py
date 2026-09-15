@@ -300,6 +300,15 @@ class Exosuit:
 
                 time.sleep(1 / self.config.frequency)
 
+            # Session over. _control() cannot deliver the falling edge itself:
+            # it stops being called the moment the status leaves RUNNING. Without
+            # this the trigger stays high inside the controller, the next session
+            # produces no rising edge, and no baseline is ever taken again --
+            # baseline removal would work on the first run of the process and
+            # silently never again. Idempotent: the controller acts on edges, so
+            # repeating it while idle does nothing.
+            self._set_baseline_removal_trigger(False)
+
             while self._status == ExosuitStates.PRETENSIONING:
                 try:
                     self._pretension()
@@ -309,6 +318,21 @@ class Exosuit:
                 time.sleep(TensionConfig.torque_check_interval)
 
             time.sleep(EXOSUIT_STANDBY_INTERVAL)
+
+    def _set_baseline_removal_trigger(self, active: bool) -> None:
+        """Drive baseline removal (hip angle offset) on both limbs.
+
+        Called only from the control thread. The controller detects edges
+        internally with a read-modify-write on state the control loop also
+        touches, so driving it from the GPIO callback or the switch-handler
+        thread would race; ``_operation_switch`` is a plain bool those threads
+        assign, and reading it once per control iteration is safe.
+
+        :param bool active: Current operation-switch state.
+        :return: None
+        """
+        self.controller_left.set_baseline_removal_trigger(active=active)
+        self.controller_right.set_baseline_removal_trigger(active=active)
 
     def _control(self) -> None:
         """Execute one iteration of control loop."""
@@ -330,6 +354,12 @@ class Exosuit:
 
         if data_right is None or data_left is None:
             raise TypeError
+
+        # The operation switch is the baseline-removal trigger: its rising edge
+        # is the operator enabling the motors with the subject standing ready,
+        # which is exactly when the angle offset should be taken. Driven before
+        # stepping so the window is open for this sample.
+        self._set_baseline_removal_trigger(self._operation_switch)
 
         timestamp_right = data_right.timestamp
         signal_right = SensorSignal(
