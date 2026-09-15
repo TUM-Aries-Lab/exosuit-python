@@ -480,3 +480,104 @@ class TestCSVWriterSaveData:
             filepath = writer.save_data(output_dir=Path(tmpdir))
             df = pd.read_csv(filepath)
             assert len(df) == num_rows
+
+
+class TestSessionColumns:
+    """The columns that make a recorded session replayable."""
+
+    @staticmethod
+    def _record(**overrides) -> RecordData:
+        """Build a RecordData with the session columns filled.
+
+        :param overrides: Field values to override.
+        :return: A populated record.
+        :rtype: RecordData
+        """
+        signal = SensorSignal(timestamp=1.0, angle_rad=0.7, velocity_rad_per_sec=0.2)
+        fields = {
+            "timestamp": 1.0,
+            "raw_signal_left": signal,
+            "filtered_signal_left": signal,
+            "raw_signal_right": signal,
+            "filtered_signal_right": signal,
+            "motor_torque_nm_per_kg_left": 0.0,
+            "motor_speed_rad_per_sec_left": 0.0,
+            "motor_position_rad_left": 0.0,
+            "motor_torque_nm_per_kg_right": 0.0,
+            "motor_speed_rad_per_sec_right": 0.0,
+            "motor_position_rad_right": 0.0,
+            "motor_command_left": -1.25,
+            "motor_command_right": 1.25,
+            "operation_switch": True,
+            "baseline_offset_rad_left": 0.33,
+            "baseline_offset_rad_right": -0.21,
+        }
+        fields.update(overrides)
+        return RecordData(**fields)
+
+    def test_the_session_columns_are_written(self) -> None:
+        """Switch, offsets and commands must reach the row, not just the dataclass."""
+        writer = CSVWriter()
+        writer.append_data(self._record())
+        row = writer.rows[0]
+
+        assert row[RecordDataColumnNames.OPERATION_SWITCH.value] == 1.0
+        assert row[RecordDataColumnNames.BASELINE_OFFSET_RAD_LEFT.value] == 0.33
+        assert row[RecordDataColumnNames.BASELINE_OFFSET_RAD_RIGHT.value] == -0.21
+        assert row[RecordDataColumnNames.MOTOR_COMMAND_LEFT.value] == -1.25
+        assert row[RecordDataColumnNames.MOTOR_COMMAND_RIGHT.value] == 1.25
+
+    def test_the_switch_is_written_as_a_number(self) -> None:
+        """A bool would round-trip through pandas as True/False, not 1/0.
+
+        The playback side reads this column as a numeric trigger, so it has to
+        be a number in the file.
+        """
+        writer = CSVWriter()
+        writer.append_data(self._record(operation_switch=False))
+
+        value = writer.rows[0][RecordDataColumnNames.OPERATION_SWITCH.value]
+        assert value == 0.0
+        assert isinstance(value, float)
+
+    def test_the_raw_angle_stays_the_uncorrected_one(self) -> None:
+        """The writer must record what it is given, offset included.
+
+        Replay reproduces a session by feeding the raw angle back with the
+        recorded trigger. If the raw column were ever the baseline-corrected
+        angle, playback would subtract the offset a second time.
+        """
+        raw = SensorSignal(timestamp=1.0, angle_rad=0.7, velocity_rad_per_sec=0.2)
+        corrected = SensorSignal(
+            timestamp=1.0, angle_rad=0.7 - 0.33, velocity_rad_per_sec=0.2
+        )
+
+        writer = CSVWriter()
+        writer.append_data(
+            self._record(raw_signal_left=raw, filtered_signal_left=corrected)
+        )
+        row = writer.rows[0]
+
+        assert row[RecordDataColumnNames.RAW_ANGLE_LEFT.value] == 0.7
+        assert row[RecordDataColumnNames.RAW_ANGLE_LEFT.value] - row[
+            RecordDataColumnNames.BASELINE_OFFSET_RAD_LEFT.value
+        ] == pytest.approx(row[RecordDataColumnNames.FILTERED_ANGLE_LEFT.value])
+
+    def test_saved_file_contains_the_session_columns(self) -> None:
+        """End to end: the columns survive the DataFrame round-trip."""
+        writer = CSVWriter()
+        writer.append_data(self._record())
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = writer.save_data(output_dir=Path(directory))
+            frame = pd.read_csv(path)
+
+        for column in (
+            RecordDataColumnNames.OPERATION_SWITCH,
+            RecordDataColumnNames.BASELINE_OFFSET_RAD_LEFT,
+            RecordDataColumnNames.BASELINE_OFFSET_RAD_RIGHT,
+            RecordDataColumnNames.MOTOR_COMMAND_LEFT,
+            RecordDataColumnNames.MOTOR_COMMAND_RIGHT,
+        ):
+            assert column.value in frame.columns
+        assert frame[RecordDataColumnNames.OPERATION_SWITCH.value].iloc[0] == 1.0

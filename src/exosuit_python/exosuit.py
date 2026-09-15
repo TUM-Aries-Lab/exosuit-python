@@ -1,5 +1,6 @@
 """Exosuit configuration."""
 
+import math
 import threading
 import time
 import warnings
@@ -18,6 +19,7 @@ from imu_python.factory import IMUFactory
 from imu_python.sensor_manager import IMUManager
 from motor_python.cube_mars_motor import CubeMarsAK606v3
 
+from exosuit_python.csv_writer import CSVWriter, RecordData
 from exosuit_python.definitions import (
     BOTH,
     EXOSUIT_STANDBY_INTERVAL,
@@ -50,6 +52,9 @@ class ExosuitConfig:
         mock_devices: flag to use mock devices.
         test_gpio: flag to use Jetson GPIO (for switch testing on the Jetson) and use mock_devices.
         imu_cfg: IMU config that defines the IMU to use for each leg.
+        record: write a CSV recording of every session to RECORDINGS_DIR. On by
+            default -- an unrecorded trial cannot be analysed afterwards, and
+            the cost is one buffered row per control iteration.
 
     """
 
@@ -57,6 +62,7 @@ class ExosuitConfig:
     mock_devices: bool = False
     test_gpio: bool = False
     imu_cfg: IMUConfig = field(default_factory=IMUConfig)
+    record: bool = True
 
 
 class Exosuit:
@@ -121,6 +127,10 @@ class Exosuit:
         self.controller_right = WalkOnController(
             left_limb=False, config=self.controller_config
         )
+
+        # One writer, reset per session, so each run of the operation switch
+        # produces its own timestamped CSV rather than one file per process.
+        self.csv_writer = CSVWriter()
 
         self.motor_left: CubeMarsAK606v3 | MockMotor
         self.motor_right: CubeMarsAK606v3 | MockMotor
@@ -249,6 +259,8 @@ class Exosuit:
             logger.debug("Starting Motors")
             logger.debug("Starting Controller")
 
+            self._start_recording()
+
             # TODO: get mode
             self._status = ExosuitStates.STANDBY
             logger.info("Exosuit status: standby")
@@ -271,6 +283,10 @@ class Exosuit:
             # suppress warning from GPIO when no channels has been set up
             warnings.simplefilter("ignore", RuntimeWarning)
             self.gpio.cleanup()
+        # Closed before the IMUs stop and before the loop thread is joined:
+        # the standby lap reads the IMUs every tick, so stopping them first
+        # leaves it logging read failures at 100 Hz until the join completes.
+        self._save_recording()
         try:  # imu attributes can be unassigned in case of failure
             self.imu_left.stop()
             self.imu_right.stop()
@@ -309,14 +325,33 @@ class Exosuit:
             # repeating it while idle does nothing.
             self._set_baseline_removal_trigger(False)
 
+            # Pretensioning ticks at the control rate, like every other lap, so
+            # the recording keeps one row spacing for the whole run.
+            # TensionConfig.torque_check_interval described how often a stubbed
+            # torque value was re-read; the working implementation in
+            # receiver.py steps its tension regulator every tick instead, so
+            # that its median buffer and low-pass filter stay primed.
             while self._status == ExosuitStates.PRETENSIONING:
                 try:
                     self._pretension()
+                    self._record_sensors_only()
                 except Exception as err:
                     logger.error(f"Exosuit control loop exception: '{err}'.")
 
-                time.sleep(TensionConfig.torque_check_interval)
+                time.sleep(1 / self.config.frequency)
 
+            # Keep recording while idle, at the same rate, so one run produces
+            # one continuous file at one spacing. Written once, at shutdown.
+            while self._status == ExosuitStates.STANDBY:
+                try:
+                    self._record_sensors_only()
+                except Exception as err:
+                    logger.error(f"Exosuit idle recording exception: '{err}'.")
+
+                time.sleep(1 / self.config.frequency)
+
+            # Reached only in states with no loop of their own (INITIALIZING),
+            # and keeps this from becoming a busy spin.
             time.sleep(EXOSUIT_STANDBY_INTERVAL)
 
     def _set_baseline_removal_trigger(self, active: bool) -> None:
@@ -361,25 +396,200 @@ class Exosuit:
         # stepping so the window is open for this sample.
         self._set_baseline_removal_trigger(self._operation_switch)
 
-        timestamp_right = data_right.timestamp
-        signal_right = SensorSignal(
-            angle_rad=data_right.quat.to_euler(seq="xyz").z,
-            velocity_rad_per_sec=data_right.device_data.gyro.z,
-            timestamp=timestamp_right,
+        signal_left, signal_right = self._build_signals(
+            data_left=data_left, data_right=data_right
         )
         command_right = self.controller_right.step(curr_signal=signal_right)
-
-        timestamp_left = data_left.timestamp
-        signal_left = SensorSignal(
-            angle_rad=data_left.quat.to_euler(seq="xyz").z,
-            velocity_rad_per_sec=data_left.device_data.gyro.z,
-            timestamp=timestamp_left,
-        )
         command_left = self.controller_left.step(curr_signal=signal_left)
 
         self.motor_left.set_velocity(convert_rad_per_sec_to_rpm(command_left))
 
         self.motor_right.set_velocity(convert_rad_per_sec_to_rpm(command_right))
+
+        if self.config.record:
+            self._record_sample(
+                raw=(signal_left, signal_right),
+                filtered=(
+                    self.controller_left.last_filtered_signal or signal_left,
+                    self.controller_right.last_filtered_signal or signal_right,
+                ),
+                commands=(command_left, command_right),
+            )
+
+    @staticmethod
+    def _build_signals(data_left, data_right) -> tuple[SensorSignal, SensorSignal]:
+        """Turn a pair of IMU readings into raw sensor signals.
+
+        Each limb keeps its own IMU timestamp; the row is stamped with the
+        left one.
+
+        :param data_left: Reading from the left IMU.
+        :param data_right: Reading from the right IMU.
+        :return: ``(left, right)`` raw signals.
+        :rtype: tuple[SensorSignal, SensorSignal]
+        """
+        return (
+            SensorSignal(
+                angle_rad=data_left.quat.to_euler(seq="xyz").z,
+                velocity_rad_per_sec=data_left.device_data.gyro.z,
+                timestamp=data_left.timestamp,
+            ),
+            SensorSignal(
+                angle_rad=data_right.quat.to_euler(seq="xyz").z,
+                velocity_rad_per_sec=data_right.device_data.gyro.z,
+                timestamp=data_right.timestamp,
+            ),
+        )
+
+    def _record_sensors_only(self) -> None:
+        """Record one row in a state where the controller does not run.
+
+        Used for standby and pretensioning, so the recording covers the whole
+        process rather than just the sessions: the file shows what the sensors
+        saw between runs, at one spacing throughout.
+
+        The controller is deliberately NOT stepped here. Doing so would let its
+        SOGI-FLL and gait state evolve while idle and change how the next
+        session begins, which is a control change rather than a recording one.
+        The filtered and command columns are therefore NaN on these rows --
+        nothing computed them, and repeating the last live value would read as
+        output the controller never produced. ``exosuit_state`` says which
+        state the row came from.
+
+        :return: None
+        """
+        if not self.config.record:
+            return
+
+        data_left = self.imu_left.get_data()
+        data_right = self.imu_right.get_data()
+        if data_left is None or data_right is None:
+            return
+
+        raw_left, raw_right = self._build_signals(
+            data_left=data_left, data_right=data_right
+        )
+        not_computed_left = SensorSignal(
+            timestamp=raw_left.timestamp,
+            angle_rad=math.nan,
+            velocity_rad_per_sec=math.nan,
+        )
+        not_computed_right = SensorSignal(
+            timestamp=raw_right.timestamp,
+            angle_rad=math.nan,
+            velocity_rad_per_sec=math.nan,
+        )
+
+        self._record_sample(
+            raw=(raw_left, raw_right),
+            filtered=(not_computed_left, not_computed_right),
+            commands=(math.nan, math.nan),
+        )
+
+    def _record_sample(
+        self,
+        raw: tuple[SensorSignal, SensorSignal],
+        filtered: tuple[SensorSignal, SensorSignal],
+        commands: tuple[float, float],
+    ) -> None:
+        """Buffer one row of this process's recording.
+
+        Rows are held in memory and written once, at shutdown, so the control
+        loop never touches the disk and one run produces one file.
+
+        Motor torque, speed and position are written as NaN -- not measured, as
+        opposed to a zero, which would read as "the motor produced no torque".
+
+        Position and speed *are* obtainable: ``CubeMarsAK606v3.get_status()``
+        returns raw bytes that ``motor_python.MotorStatusParser`` decodes into
+        ``position_degrees`` and ``speed_erpm``. They are not wired up here
+        because ``get_status()`` is a blocking serial round-trip, and two of
+        them per iteration inside the loop that drives the motors is a
+        real-time risk worth measuring before taking it. ``MockMotor`` would
+        also need the same call, which it does not have today.
+
+        Torque is not measured by the motor at all: it reports current, so the
+        Nm/kg column needs iq_current x Kt and the subject's mass -- two
+        constants that belong in a config, not in a guess here.
+
+        :param raw: ``(left, right)`` raw signals, before preprocessing.
+        :param filtered: ``(left, right)`` preprocessed signals, or NaN values
+            on rows where the controller did not run.
+        :param commands: ``(left, right)`` commanded motor values, NaN when idle.
+        :return: None
+        """
+        not_measured = math.nan
+        raw_left, raw_right = raw
+        filtered_left, filtered_right = filtered
+        command_left, command_right = commands
+
+        self.csv_writer.append_data(
+            RecordData(
+                timestamp=raw_left.timestamp if raw_left.timestamp else not_measured,
+                raw_signal_left=raw_left,
+                filtered_signal_left=filtered_left,
+                raw_signal_right=raw_right,
+                filtered_signal_right=filtered_right,
+                motor_torque_nm_per_kg_left=not_measured,
+                motor_speed_rad_per_sec_left=not_measured,
+                motor_position_rad_left=not_measured,
+                motor_torque_nm_per_kg_right=not_measured,
+                motor_speed_rad_per_sec_right=not_measured,
+                motor_position_rad_right=not_measured,
+                motor_command_left=command_left,
+                motor_command_right=command_right,
+                operation_switch=self._operation_switch,
+                tension_switch=self._tension_switch,
+                baseline_offset_rad_left=self.controller_left.baseline_offset_rad,
+                baseline_offset_rad_right=self.controller_right.baseline_offset_rad,
+            )
+        )
+
+    def _start_recording(self) -> None:
+        """Open the run's recording file, if recording is enabled.
+
+        One file per run of the process. Rows stream into it as they are
+        produced rather than being buffered: the exosuit records continuously,
+        standby included, so buffering would grow by roughly 13 MB per minute
+        at 100 Hz and a crash would take the whole recording with it.
+
+        :return: None
+        """
+        if not self.config.record:
+            return
+
+        try:
+            self.csv_writer.start_streaming()
+        except OSError as err:
+            logger.error(f"Could not open a recording file: '{err}'.")
+
+    def _save_recording(self) -> None:
+        """Close the run's recording, once, at shutdown.
+
+        A failure here must not take the exosuit down with it -- by the time
+        this runs the loop has stopped and the motors are idle, so the
+        recording is the least important thing happening.
+
+        :return: None
+        """
+        if self.csv_writer.is_streaming:
+            try:
+                self.csv_writer.stop_streaming()
+            except OSError as err:
+                logger.error(f"Could not close the recording: '{err}'.")
+            return
+
+        # Not streaming: either recording is off, or the file could not be
+        # opened and rows fell back to the buffer.
+        if not self.csv_writer.rows:
+            return
+
+        try:
+            self.csv_writer.save_data()
+        except OSError as err:
+            logger.error(f"Could not save the recording: '{err}'.")
+        finally:
+            self.csv_writer.reset()
 
     def _pretension(self) -> None:
         """Execute one iteration of pretensioning loop."""
