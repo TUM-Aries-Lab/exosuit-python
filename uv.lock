@@ -569,7 +569,7 @@ hw = [
 
 [package.metadata]
 requires-dist = [
-    { name = "hip-controller", specifier = ">=0.1.1" },
+    { name = "hip-controller", specifier = ">=0.2.0" },
     { name = "imu-python", specifier = ">=0.1.2" },
     { name = "loguru", specifier = ">=0.7.3" },
     { name = "motor-python", specifier = ">=0.0.4" },
@@ -653,7 +653,7 @@ wheels = [
 
 [[package]]
 name = "hip-controller"
-version = "0.1.1"
+version = "0.2.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "loguru" },
@@ -665,9 +665,9 @@ dependencies = [
     { name = "pyside6" },
     { name = "scipy" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/e3/ea/4f7a57c169b2eb0d9937252e46bd8d4e96f51961116dace825dbae546849/hip_controller-0.1.1.tar.gz", hash = "sha256:c7022eb2ebdf71a0cbfec39cd3c464643ce14f296f3e4137ca88c24969950343", size = 48883, upload-time = "2026-05-13T14:32:37.423Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/11/a1/e8442eef63eddf8b64ead0622356d31533e29f6aaf7afd20f41b650bdf64/hip_controller-0.2.0.tar.gz", hash = "sha256:29a32d455943bdc9542959c256614d6d43a818a42806ac88237b7f3cce32be3f", size = 83037, upload-time = "2026-09-15T12:40:36.525Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/f9/cc/94c9baffb2b2473b3ebb3201c6d102f83f0fcb52f8d42cc51271891b7635/hip_controller-0.1.1-py3-none-any.whl", hash = "sha256:6e61227b1b2133a029ab27342feae5b199cddfb134b27811723f3486fb63d266", size = 53941, upload-time = "2026-05-13T14:32:35.968Z" },
+    { url = "https://files.pythonhosted.org/packages/22/4c/ab22f95e0fb27e13528f13c843f8f6b66e789ebe65ea7d79efe62ac467fc/hip_controller-0.2.0-py3-none-any.whl", hash = "sha256:dc65020220ff771f079d969ee205d9430fc9676d88f37b1c8af2d6a4d7d6e634", size = 92953, upload-time = "2026-09-15T12:40:35.015Z" },
 ]
 
 [[package]]

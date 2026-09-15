@@ -13,7 +13,7 @@ except Exception:
     logger.warning("Jetson GPIO import failed. Are you running on the Jetson?")
     GPIO = None
 from hip_controller.control.app import WalkOnController
-from hip_controller.definitions import SensorSignal
+from hip_controller.definitions import BasicConfig, SensorSignal
 from imu_python.factory import IMUFactory
 from imu_python.sensor_manager import IMUManager
 from motor_python.cube_mars_motor import CubeMarsAK606v3
@@ -22,6 +22,7 @@ from exosuit_python.definitions import (
     BOTH,
     EXOSUIT_STANDBY_INTERVAL,
     GPIO_SWITCH_BOUNCETIME,
+    LOCOMOTION_CLASS_IDS,
     MODE_SWITCH_1,
     MODE_SWITCH_2,
     MODE_SWITCH_LOGIC,
@@ -34,7 +35,6 @@ from exosuit_python.definitions import (
     InclinationModes,
     SwitchStates,
     TensionConfig,
-    controller_modes,
 )
 from exosuit_python.gpio import MockGPIO
 from exosuit_python.motor import MockMotor
@@ -104,8 +104,23 @@ class Exosuit:
         self.imu_left: IMUManager
         self.imu_right: IMUManager
 
-        self.controller_left = WalkOnController(reverse=False)
-        self.controller_right = WalkOnController(reverse=True)
+        # One controller configuration shared by both limbs. `frequency` must
+        # be the real loop rate: hip-controller derives its sample-rate
+        # dependent filters (notches, baseline window) from it, so a mismatch
+        # silently mistunes them. `filtered=False` because the signal handed to
+        # step() is the raw IMU angle -- the pre-processing pipeline runs inside
+        # the controller. Per-limb wiring reversal comes from the config's
+        # left_limb_reverse / right_limb_reverse defaults, which match the
+        # False/True this used to pass positionally.
+        self.controller_config = BasicConfig(
+            frequency=int(config.frequency), filtered=False
+        )
+        self.controller_left = WalkOnController(
+            left_limb=True, config=self.controller_config
+        )
+        self.controller_right = WalkOnController(
+            left_limb=False, config=self.controller_config
+        )
 
         self.motor_left: CubeMarsAK606v3 | MockMotor
         self.motor_right: CubeMarsAK606v3 | MockMotor
@@ -304,14 +319,13 @@ class Exosuit:
             logger.info(
                 f"Mode change:{self._prev_inclination_mode.name} -> {self.inclination_mode.name}"
             )
-            # Both legs. Only the left one used to be retuned, so selecting
-            # uphill or downhill left the right leg on its construction default
-            # (level ground) for the rest of the session -- the two legs then
-            # assisted with different gains and sigmoid powers, which the wearer
-            # feels as an asymmetry rather than as a mode change.
-            mode = controller_modes[self.inclination_mode]
-            self.controller_left.amplitude_modulation.set_mode(mode)
-            self.controller_right.amplitude_modulation.set_mode(mode)
+            # Both legs, and through set_locomotion_mode rather than reaching
+            # into amplitude_modulation: it also swaps the per-mode SOGI-FLL
+            # tuning and the motion-mapping table, which the old call left on
+            # the level-ground settings whatever mode was selected.
+            class_id = LOCOMOTION_CLASS_IDS[self.inclination_mode]
+            self.controller_left.set_locomotion_mode(class_id)
+            self.controller_right.set_locomotion_mode(class_id)
             self._prev_inclination_mode = self.inclination_mode
 
         if data_right is None or data_left is None:
