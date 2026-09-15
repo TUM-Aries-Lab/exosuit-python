@@ -50,6 +50,9 @@ DEFAULT_EXOSUIT_FREQUENCY_HZ = 100
 
 THREAD_JOIN_TIMEOUT = 2.0
 
+# Fallback wake-up for the switch handler. Operation and tension switches now
+# wake it on their GPIO edge, so this only bounds how long a MODE_SWITCH_1/2
+# change waits -- those are polled, not edge-detected.
 SWITCH_EVENT_HANDLER_INTERVAL = 0.5
 EXOSUIT_STANDBY_INTERVAL = 0.1
 
