@@ -38,12 +38,24 @@ from exosuit_python.definitions import (
     IMUConfig,
     InclinationModes,
     MotorCommandConfig,
+    MotorSaturation,
     SwitchStates,
     TensionConfig,
 )
 from exosuit_python.gpio import MockGPIO
 from exosuit_python.motor import MockMotor
 from exosuit_python.tensioning import LegTensioner
+
+
+def _saturate(value: float, low: float, high: float) -> float:
+    """Clamp a command into its permitted range.
+
+    :param value: The requested value.
+    :param low: Lower limit, inclusive.
+    :param high: Upper limit, inclusive.
+    :return: The value, clamped.
+    """
+    return max(low, min(high, value))
 
 
 @dataclass
@@ -170,6 +182,9 @@ class Exosuit:
         self._tensioner_right = LegTensioner(
             TensionConfig.tensioning_velocity_right_rad_per_sec
         )
+        # Whether the last velocity command hit its limit, so saturation is
+        # reported on the edge rather than once per tick.
+        self._velocity_was_clamped = False
 
         # initialization calls
         if not self._initialize_imus():
@@ -529,11 +544,34 @@ class Exosuit:
             stay independently tunable.
         :return: None
         """
+        # Saturate before the frame is packed, as the rig does inside
+        # pack_mit_command(). Position, Kp and the feed-forward torque are
+        # fixed at zero by this method and cannot leave their ranges, so only
+        # the two values a caller can vary are clamped here.
+        requested = velocity_rad_per_sec
+        velocity_rad_per_sec = _saturate(
+            requested, *MotorSaturation.velocity_rad_per_sec
+        )
+        # Edge-triggered: a railed controller holds its output, and warning on
+        # every tick at 100 Hz would bury the moment it started.
+        clamped = velocity_rad_per_sec != requested
+        if clamped and not self._velocity_was_clamped:
+            logger.warning(
+                f"Velocity command {requested:.3f} rad/s saturated to "
+                f"{velocity_rad_per_sec:.3f} rad/s."
+            )
+        elif self._velocity_was_clamped and not clamped:
+            logger.info("Velocity command back within limits.")
+        self._velocity_was_clamped = clamped
+
         motor.set_mit_mode(
             pos_rad=0.0,
             vel_rad_s=velocity_rad_per_sec,
             kp=MotorCommandConfig.kp,
-            kd=(MotorCommandConfig.velocity_kd if velocity_kd is None else velocity_kd),
+            kd=_saturate(
+                MotorCommandConfig.velocity_kd if velocity_kd is None else velocity_kd,
+                *MotorSaturation.kd,
+            ),
             torque_ff_nm=MotorCommandConfig.torque_ff_nm,
         )
 
