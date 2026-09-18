@@ -420,6 +420,7 @@ class Exosuit:
         """
         was_running = False
         while self._status != ExosuitStates.STOPPED:
+            due = time.monotonic()
             while self._status == ExosuitStates.RUNNING:
                 was_running = True
                 try:
@@ -429,7 +430,7 @@ class Exosuit:
                 except Exception as err:
                     logger.error(f"Exosuit control loop exception: '{err}'.")
 
-                time.sleep(1 / self.config.frequency)
+                due = self._sleep_until_due(due)
 
             # Session over. _control() cannot deliver the falling edge itself:
             # it stops being called the moment the status leaves RUNNING. Without
@@ -462,6 +463,7 @@ class Exosuit:
             # and its torque low-pass filter are stepped every tick for the
             # same reason the rig does: both are rate-dependent, and the STOP
             # hold is counted in ticks rather than slept through.
+            due = time.monotonic()
             while self._status == ExosuitStates.PRETENSIONING:
                 try:
                     self._pretension()
@@ -469,17 +471,18 @@ class Exosuit:
                 except Exception as err:
                     logger.error(f"Exosuit control loop exception: '{err}'.")
 
-                time.sleep(1 / self.config.frequency)
+                due = self._sleep_until_due(due)
 
             # Keep recording while idle, at the same rate, so one run produces
             # one continuous file at one spacing. Written once, at shutdown.
+            due = time.monotonic()
             while self._status == ExosuitStates.STANDBY:
                 try:
                     self._record_sensors_only()
                 except Exception as err:
                     logger.error(f"Exosuit idle recording exception: '{err}'.")
 
-                time.sleep(1 / self.config.frequency)
+                due = self._sleep_until_due(due)
 
             # Reached only in states with no loop of their own (INITIALIZING),
             # and keeps this from becoming a busy spin.
@@ -865,6 +868,37 @@ class Exosuit:
                 # the other leg is still pulling would stall the loop and feed
                 # a wrong dt to the still-running leg's filter and hold timer.
                 motor.stop()
+
+    def _sleep_until_due(self, previous_due: float) -> float:
+        """Sleep until the next tick falls due, and say when that was.
+
+        Sleeping a whole period after the work makes every iteration take the
+        period *plus* however long the work took, so the loop can never reach
+        its configured rate: a bench run measured 78.6 Hz against the 100 Hz
+        configured, a median period of 11.04 ms being 10 ms of sleep and 1.04
+        ms of work. Sleeping only the remainder holds the cadence and stops
+        the error accumulating across ticks.
+
+        The rate is not cosmetic. ``BasicConfig(frequency=...)`` is handed the
+        configured value, and hip-controller derives its notches and baseline
+        window from it, so a loop that quietly runs a fifth slower than it
+        claims mistunes the whole filter chain.
+
+        After a tick that ran long the schedule restarts from now rather than
+        from when it should have been. Catching up would fire a burst of
+        back-to-back iterations, which is the opposite of what a control loop
+        wants after it has already fallen behind.
+
+        :param previous_due: When the tick that just ran was due.
+        :return: When the next tick falls due.
+        :rtype: float
+        """
+        next_due = previous_due + 1 / self.config.frequency
+        remaining = next_due - time.monotonic()
+        if remaining > 0:
+            time.sleep(remaining)
+            return next_due
+        return time.monotonic()
 
     def _elapsed_since_last_tick(self) -> float:
         """Return the time since the previous pre-tensioning tick, in seconds.
