@@ -23,6 +23,13 @@ class MockMotor:
         #: The last MIT command received, as a dict, or None. Tests assert on
         #: this to pin the units of the command path.
         self.last_mit_command: dict[str, float] | None = None
+        #: Counters the safety tests read. A released motor and a motor that
+        #: was merely commanded to zero look identical from last_mit_command,
+        #: and "did it pull again?" cannot be answered from a single value at
+        #: all, so both are counted.
+        self.stop_calls = 0
+        self.pull_commands = 0
+        self.get_current_calls = 0
 
     def set_velocity(self, velocity_erpm: int) -> None:
         """Set mock motor velocity."""
@@ -43,6 +50,8 @@ class MockMotor:
         exercisable on mock devices instead of stalling forever at zero.
         """
         logger.debug(f"MIT command: vel={vel_rad_s} rad/s, kd={kd}")
+        if vel_rad_s != 0.0:
+            self.pull_commands += 1
         self.last_mit_command = {
             "pos_rad": pos_rad,
             "vel_rad_s": vel_rad_s,
@@ -54,12 +63,23 @@ class MockMotor:
             self._torque_nm += self.TORQUE_RAMP_NM_PER_TICK
 
     def get_current(self) -> float | None:
-        """Return the MIT torque feedback in N*m (see the class docstring)."""
+        """Return the MIT torque feedback in N*m (see the class docstring).
+
+        Counted, because on the real CAN motor the status request frame is
+        byte-identical to the MIT enable frame -- so polling a stopped motor
+        re-energises it, and "was it polled at all?" is a safety question.
+        """
+        self.get_current_calls += 1
         return self._torque_nm
 
     def stop(self) -> None:
-        """Stop the mock motor and let the tendon go slack."""
-        self._torque_nm = 0.0
+        """Release the mock motor.
+
+        The tendon keeps its load. A real one does not go slack the instant
+        the windings are released, and zeroing here would hide a controller
+        that pulls the same tendon twice.
+        """
+        self.stop_calls += 1
 
     def close(self) -> None:
         """Close mock motor connection."""

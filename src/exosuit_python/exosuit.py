@@ -374,8 +374,10 @@ class Exosuit:
 
         :return: None
         """
+        was_running = False
         while self._status != ExosuitStates.STOPPED:
             while self._status == ExosuitStates.RUNNING:
+                was_running = True
                 try:
                     self._control()
                 except TypeError as err:
@@ -393,6 +395,23 @@ class Exosuit:
             # silently never again. Idempotent: the controller acts on edges, so
             # repeating it while idle does nothing.
             self._set_baseline_removal_trigger(False)
+
+            # Release the motors on the same falling edge. Nothing else does:
+            # _control() stops being called the moment the status leaves
+            # RUNNING, and set_mit_mode() installs a keep-alive thread that
+            # re-transmits the last MIT payload until stop() or close(). So
+            # without this both motors keep driving at the last assist command
+            # after the operator has switched off, and an exception in
+            # _control() freezes the assist at its last value instead of
+            # dropping it. The old UART path had no keep-alive, which is why
+            # this only became reachable with the move to CAN.
+            #
+            # Edge-triggered, like the rig's own enable/disable frames: stop()
+            # blocks for the best part of a tenth of a second, and this block
+            # runs on every lap of the outer loop, not only after a session.
+            if was_running:
+                was_running = False
+                self._release_motors()
 
             # Pretensioning ticks at the control rate, like every other lap, so
             # the recording keeps one row spacing for the whole run. The chart
@@ -704,6 +723,31 @@ class Exosuit:
 
         :return: None
         """
+        if not self._tension_switch:
+            # Releasing the switch ends pre-tensioning whatever the charts are
+            # doing -- on the rig the whole subsystem is gated by this switch.
+            # Stopping explicitly rather than relying on a chart transition
+            # also covers a tap too short for this thread to have armed the
+            # charts at all, which would otherwise strand them in RESET with
+            # no exit and freeze the loop here for good.
+            self._release_motors()
+            logger.info("State change: pretensioning -> standby")
+            self._reset_tensioners()
+            self._status = ExosuitStates.STANDBY
+            return
+
+        if self._tensioner_left.finished and self._tensioner_right.finished:
+            # Both charts are terminal and the motors are already stopped, so
+            # the pull is over. Hold here until the switch is released, and do
+            # not poll: a status request is byte-identical to the MIT enable
+            # frame, so reading a stopped motor would re-energise it.
+            #
+            # DISABLE is terminal on the rig too. Re-arming here instead --
+            # resetting the charts and returning to standby while the switch
+            # is still held -- let the handler send us straight back into
+            # PRETENSIONING, pulling the tendon tighter on every cycle.
+            return
+
         time_difference = 1 / self.config.frequency
         on_off = int(self._tension_switch)
 
@@ -739,13 +783,11 @@ class Exosuit:
                 # a wrong dt to the still-running leg's filter and hold timer.
                 motor.stop()
 
-        if self._tensioner_left.finished and self._tensioner_right.finished:
-            logger.info("State change: pretensioning -> standby")
-            self._reset_tensioners()
-            self._status = ExosuitStates.STANDBY
+    def _release_motors(self) -> None:
+        """Stop both motors, releasing the tendons.
 
-    def _abort_pretensioning(self) -> None:
-        """Stop both motors and leave pre-tensioning without having tensioned.
+        A motor fault must not take the loop down with it, so each stop is
+        guarded: the other leg still needs releasing either way.
 
         :return: None
         """
@@ -754,6 +796,13 @@ class Exosuit:
                 motor.stop()
             except Exception as err:
                 logger.error(f"Could not stop a motor: '{err}'.")
+
+    def _abort_pretensioning(self) -> None:
+        """Stop both motors and leave pre-tensioning without having tensioned.
+
+        :return: None
+        """
+        self._release_motors()
         self._reset_tensioners()
         self._status = ExosuitStates.STANDBY
 

@@ -293,6 +293,18 @@ def test_a_switch_edge_signals_the_handler():
     assert exosuit._switch_event.is_set()
 
 
+def _mock_gpio(exosuit: Exosuit) -> MockGPIO:
+    """Return the GPIO, narrowed to the mock these tests build.
+
+    simulate_switch() exists only on the mock, so the union has to be narrowed
+    before it can be driven. The assert doubles as a check that the fixture
+    really did build a mock rather than reaching for the Jetson's pins.
+    """
+    gpio = exosuit.gpio
+    assert isinstance(gpio, MockGPIO)
+    return gpio
+
+
 def _mock_motor(exosuit: Exosuit) -> MockMotor:
     """Return the left motor, narrowed to the mock these tests build.
 
@@ -362,5 +374,98 @@ def test_pretensioning_uses_its_own_damping_gain():
     command = motor.last_mit_command
     assert command is not None
     assert command["kd"] == TensionConfig.mit_velocity_kd
+
+    exosuit._cleanup()
+
+
+def test_switching_off_a_running_session_releases_the_motors():
+    """Switching off must reach the motors, not just the state machine.
+
+    set_mit_mode() installs a keep-alive thread that re-transmits the last MIT
+    payload until stop() or close(). Leaving RUNNING without stopping therefore
+    leaves both motors driving at the last assist command with the operator's
+    switch already off. The old UART path had no keep-alive, so this only
+    became reachable with the move to CAN.
+    """
+    exosuit = _mock_exosuit(record=False)
+    time.sleep(1)
+    state_wait = EXOSUIT_STANDBY_INTERVAL + SWITCH_EVENT_HANDLER_INTERVAL + 0.1
+
+    gpio = _mock_gpio(exosuit)
+    gpio.simulate_switch(OPERATION_SWITCH, exosuit.on_signal)
+    time.sleep(state_wait)
+    assert exosuit._status == ExosuitStates.RUNNING
+
+    motor = _mock_motor(exosuit)
+    motor.stop_calls = 0
+
+    gpio.simulate_switch(OPERATION_SWITCH, exosuit.off_signal)
+    time.sleep(state_wait)
+
+    assert exosuit._status == ExosuitStates.STANDBY
+    assert motor.stop_calls >= 1
+
+    exosuit._cleanup()
+
+
+def test_pretensioning_does_not_pull_again_while_the_switch_is_held():
+    """Reaching the threshold ends the pull; it must not re-arm.
+
+    DISABLE is terminal on the rig. Resetting the charts and returning to
+    standby while the switch is still held lets the switch handler send the
+    loop straight back into PRETENSIONING, winding the tendon tighter on every
+    cycle for as long as the wearer holds the switch.
+
+    Polling is checked too: on the real motor the status request frame is
+    byte-identical to the MIT enable frame, so continuing to read torque from
+    a stopped motor would re-energise it.
+    """
+    exosuit = _mock_exosuit(record=False)
+    time.sleep(1)
+    state_wait = EXOSUIT_STANDBY_INTERVAL + SWITCH_EVENT_HANDLER_INTERVAL + 0.1
+
+    gpio = _mock_gpio(exosuit)
+    gpio.simulate_switch(TENSION_SWITCH, exosuit.on_signal)
+    time.sleep(state_wait)
+    assert exosuit._status == ExosuitStates.PRETENSIONING
+
+    # Long enough for the torque to cross the threshold and the STOP hold to
+    # run out, so both charts are terminal.
+    time.sleep(TensionConfig.stop_hold_time + 1.5)
+    motor = _mock_motor(exosuit)
+    assert exosuit._status == ExosuitStates.PRETENSIONING
+
+    settled_pulls = motor.pull_commands
+    settled_polls = motor.get_current_calls
+    time.sleep(1.0)
+
+    assert motor.pull_commands == settled_pulls
+    assert motor.get_current_calls == settled_polls
+
+    # And releasing the switch is what ends it.
+    gpio.simulate_switch(TENSION_SWITCH, exosuit.off_signal)
+    time.sleep(state_wait)
+    assert exosuit._status == ExosuitStates.STANDBY
+
+    exosuit._cleanup()
+
+
+def test_releasing_the_switch_leaves_pretensioning_even_if_it_never_armed():
+    """A tap too short to arm the charts must not strand the loop.
+
+    RESET has no exit for on_off == 0, so charts that never reached TENSIONING
+    never report finished. Keying the exit on the switch rather than on the
+    charts means a tap the control thread missed cannot freeze the loop in
+    PRETENSIONING -- which would also leave the operation switch dead, since
+    the handler's PRETENSIONING branch does nothing.
+    """
+    exosuit = _mock_exosuit(record=False)
+    exosuit._tension_switch = False
+    exosuit._status = ExosuitStates.PRETENSIONING
+
+    exosuit._pretension()
+
+    assert exosuit._status == ExosuitStates.STANDBY
+    assert _mock_motor(exosuit).stop_calls >= 1
 
     exosuit._cleanup()
