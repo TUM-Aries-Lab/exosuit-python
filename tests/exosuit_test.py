@@ -617,3 +617,43 @@ def test_a_late_tick_cannot_rail_the_filter():
     assert capped < 5.0
 
     exosuit._cleanup()
+
+
+def test_the_loop_paces_on_a_schedule_not_a_fixed_delay():
+    """Sleeping a whole period after the work makes the rate unreachable.
+
+    A bench run measured 78.6 Hz against 100 Hz configured, the period being
+    the sleep plus however long the work took. That is not cosmetic:
+    BasicConfig is handed the configured value and hip-controller derives its
+    notches and baseline window from it, so a loop running a fifth slower than
+    it claims mistunes the whole filter chain.
+    """
+    exosuit = _mock_exosuit(record=False)
+    period = 1 / exosuit.config.frequency
+
+    # A tick whose work took most of the period should sleep only the rest.
+    due = time.monotonic() - period * 0.8
+    started = time.monotonic()
+    next_due = exosuit._sleep_until_due(due)
+    slept = time.monotonic() - started
+
+    assert slept < period * 0.5
+    assert next_due == due + period
+
+    exosuit._cleanup()
+
+
+def test_a_late_tick_restarts_the_schedule_instead_of_catching_up():
+    """Bursting back-to-back iterations is the wrong answer to falling behind."""
+    exosuit = _mock_exosuit(record=False)
+    period = 1 / exosuit.config.frequency
+
+    overdue = time.monotonic() - period * 50
+    started = time.monotonic()
+    next_due = exosuit._sleep_until_due(overdue)
+
+    assert time.monotonic() - started < period  # did not sleep
+    assert next_due >= started  # rebased on now, not on the missed schedule
+    assert next_due < started + period
+
+    exosuit._cleanup()
