@@ -169,7 +169,10 @@ MODE_SWITCH_2 = 32
 GPIO_SWITCH_BOUNCETIME = 50
 
 
-# CAN node IDs, matching motor_control.py's CAN_ID_LEFT / CAN_ID_RIGHT.
+# CAN node IDs. Same values as motor_control.py's CAN_ID_LEFT / CAN_ID_RIGHT,
+# and confirmed against this suit's own wiring on 2026-09-18 -- the AK60-6 rig
+# and the AK80-6 suit use the same node IDs, so these are checked rather than
+# merely inherited.
 MOTOR_CAN_ID_LEFT = 4
 MOTOR_CAN_ID_RIGHT = 3
 
