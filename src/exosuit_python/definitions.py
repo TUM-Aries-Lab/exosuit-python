@@ -153,6 +153,32 @@ class MotorSaturation:
     torque_nm: tuple[float, float] = (-9.0, 9.0)
 
 
+@dataclass(frozen=True)
+class IMUMounting:
+    """How this suit's IMUs sit, where that changes the signal's sign.
+
+    Bench-measured on 2026-09-18 by flexing each hip in turn and comparing the
+    two channels against each other.
+
+    ``gyro.z`` is read in the sensor's own frame, so a board mounted the other
+    way round reports the opposite sign; the reported angle is not affected,
+    because the fusion resolves orientation against gravity and a thigh at a
+    given angle tilts the same way whichever way its board faces. On this suit
+    that makes the two channels disagree on the right leg -- measured
+    ``d(euler_y)/dt = +0.885 * gyro.z`` on the left against ``-0.898`` on the
+    right -- and the controller reads angle against velocity as a phase
+    portrait, so a disagreement reflects that leg into the wrong quadrant
+    rather than failing outright.
+
+    These signs bring the velocity back into agreement with the angle. They
+    say nothing about the motors, which were measured separately and are not
+    mirrored, nor about hip-controller's ``right_limb_reverse``.
+    """
+
+    gyro_sign_left: float = 1.0
+    gyro_sign_right: float = -1.0
+
+
 class TensionState(IntEnum):
     """States of the pre-tensioning chart, ported from ``motor_control.py``."""
 
