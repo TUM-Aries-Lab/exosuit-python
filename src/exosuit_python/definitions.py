@@ -87,7 +87,25 @@ TENSION_SWITCH = 7
 MODE_SWITCH_1 = 29
 MODE_SWITCH_2 = 32
 
-GPIO_SWITCH_BOUNCETIME = 50  # TODO: test this threshold
+# Debounce window for the two edge-detected switches, in milliseconds.
+#
+# In Jetson.GPIO this is a rejection window, not a delay: an accepted edge
+# fires its callback immediately, and every further edge on that pin is
+# dropped for this long (Jetson/GPIO/gpio_event.py, the `lastcall` check). It
+# therefore contributes nothing to switch latency. What it costs is that a
+# genuine transition arriving inside the window is lost outright rather than
+# deferred.
+#
+# That used to be able to latch a stale state, because the callbacks sampled
+# the pin themselves: an edge caught mid-bounce could read the pre-settled
+# level and suppress the settling edge that followed. The callbacks no longer
+# sample -- _switch_event_handler reads the settled level and re-reads it
+# every SWITCH_EVENT_HANDLER_INTERVAL regardless -- so a dropped edge now
+# self-corrects within one pass.
+#
+# The value only has to outlast contact bounce (a few ms) while staying well
+# below the shortest deliberate actuation, so it is no longer critical.
+GPIO_SWITCH_BOUNCETIME = 50
 
 
 # switch signals - used as 'getattr' keys for GPIO

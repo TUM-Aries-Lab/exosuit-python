@@ -201,6 +201,8 @@ class Exosuit:
         :return: None
         """
         while self._status != ExosuitStates.STOPPED:
+            self._read_switch_states()
+
             if self._status == ExosuitStates.STANDBY:
                 if self._operation_switch and not self._tension_switch:
                     logger.info("State change: standby -> running")
@@ -241,19 +243,44 @@ class Exosuit:
             self._switch_event.clear()
 
     def _operation_callback(self, channel: int) -> None:
-        """Handle operation switch states triggered by signal events."""
-        opration_state = self.gpio.input(OPERATION_SWITCH)
-        if opration_state == self.on_signal:
-            self._operation_switch = True
-        elif opration_state == self.off_signal:
-            self._operation_switch = False
-        else:
-            logger.warning(f"Unrecognized operation switch state: {opration_state}")
+        """Wake the switch handler on an operation-switch edge.
 
+        Deliberately does not sample the pin -- see ``_read_switch_states``.
+        """
         self._switch_event.set()
 
     def _tension_callback(self, channel: int) -> None:
-        """Handle tension switch states triggered by signal events."""
+        """Wake the switch handler on a tension-switch edge.
+
+        Deliberately does not sample the pin -- see ``_read_switch_states``.
+        """
+        self._switch_event.set()
+
+    def _read_switch_states(self) -> None:
+        """Sample the two edge-detected switches and store their levels.
+
+        This runs in the handler rather than in the GPIO callbacks, and the
+        distinction is not cosmetic. A callback fires on the *first* edge of a
+        bouncing contact, and GPIO_SWITCH_BOUNCETIME then drops every further
+        edge on that pin for its duration -- including the one where the
+        contact finally settles. Sampling inside the callback therefore reads
+        a level that may still be mid-bounce and then never hears the
+        correction, latching the wrong state until the next actuation.
+
+        Reading here instead means the level is sampled after the wake-up,
+        and re-sampled every SWITCH_EVENT_HANDLER_INTERVAL whether an edge
+        arrived or not, so a dropped edge costs at most one pass.
+
+        :return: None
+        """
+        operation_state = self.gpio.input(OPERATION_SWITCH)
+        if operation_state == self.on_signal:
+            self._operation_switch = True
+        elif operation_state == self.off_signal:
+            self._operation_switch = False
+        else:
+            logger.warning(f"Unrecognized operation switch state: {operation_state}")
+
         tension_state = self.gpio.input(TENSION_SWITCH)
         if tension_state == self.on_signal:
             self._tension_switch = True
@@ -261,8 +288,6 @@ class Exosuit:
             self._tension_switch = False
         else:
             logger.warning(f"Unrecognized tension switch state: {tension_state}")
-
-        self._switch_event.set()
 
     def _start(self) -> None:
         """Start the IMUs and Motors.
