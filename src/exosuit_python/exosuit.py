@@ -205,7 +205,11 @@ class Exosuit:
         :return: True if successful, False otherwise
         """
         try:
-            self.gpio.setmode(self.gpio.BOARD)
+            # TEGRA_SOC, not BOARD: Blinka sets TEGRA_SOC when an IMU
+            # driver is imported, and Jetson.GPIO permits one mode per
+            # process. Agreeing with it makes its call a no-op; disagreeing
+            # makes whichever runs second raise. See the pin definitions.
+            self.gpio.setmode(self.gpio.TEGRA_SOC)
             self.gpio.setup(OPERATION_SWITCH, self.gpio.IN)
             self.gpio.setup(TENSION_SWITCH, self.gpio.IN)
             self.gpio.setup(MODE_SWITCH_1, self.gpio.IN)
