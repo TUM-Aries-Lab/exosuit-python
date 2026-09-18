@@ -156,14 +156,27 @@ class TensionState(IntEnum):
 class IMUConfig:
     """IMU configuration dataclass containing busID, IMU name and index for each leg."""
 
-    left_leg_bus: int = I2CBusID.bus_7
+    # The real sensors, as detect_and_create() reports them on this rig. A
+    # leg matches only when bus, name and index all agree, and the placeholder
+    # these replaced said name="MOCK", so nothing could ever match and both
+    # legs failed initialisation with the IMUs sitting there detected.
+    #
+    # Note the two are on *different* buses. imu-python names a sensor
+    # "{imu_name}_{imu_index}_{bus_id}", so the detected LSM6DSOX_LIS3MDL_0_1
+    # and LSM6DSOX_LIS3MDL_1_7 are index 0 on bus 1 and index 1 on bus 7.
+    # Pinning both to one bus was the second half of the mismatch.
+    #
+    # TO CONFIRM: which physical leg each sensor is on. Bus and index say
+    # nothing about anatomy, so this assignment is a guess until someone
+    # flexes one hip and checks which raw angle trace moves.
+    left_leg_bus: int = I2CBusID.bus_1
     left_leg_descr: IMUDescriptor = field(
-        default_factory=lambda: IMUDescriptor(name="MOCK", index=0)
+        default_factory=lambda: IMUDescriptor(name="LSM6DSOX_LIS3MDL", index=0)
     )
     right_leg_bus: int = I2CBusID.bus_7
     right_leg_descr: IMUDescriptor = field(
-        default_factory=lambda: IMUDescriptor(name="MOCK", index=1)
-    )  # TODO: set actual IMUs
+        default_factory=lambda: IMUDescriptor(name="LSM6DSOX_LIS3MDL", index=1)
+    )
 
 
 # Switch pins
