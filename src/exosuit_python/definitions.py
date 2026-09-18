@@ -75,10 +75,19 @@ class TensionConfig:
     involved, which is why none appears here.
     """
 
-    # Velocity command per leg. The legs are mirrored, so the signs differ --
-    # TENSION_VEL_LEFT = +3.0 and TENSION_VEL_RIGHT = -3.0 upstream.
+    # Both legs pull positive. The rig's motors are mounted mirrored, which
+    # is why it needs TENSION_VEL_LEFT = +3.0 against TENSION_VEL_RIGHT =
+    # -3.0; this suit's are not. Bench-checked on 2026-09-18: a positive
+    # command shortened the cable on both motors, so a negative one here would
+    # have paid the right tendon out, and its chart would have run to the STOP
+    # hold without ever building tension.
+    #
+    # Nothing ties this to the assist path's own mirroring, which lives in
+    # hip-controller's right_limb_reverse and is set independently -- see the
+    # note there. The two are separate because tensioning drives both tendons
+    # the same way while assist drives the hips anti-phase.
     tensioning_velocity_left_rad_per_sec: float = 3.0
-    tensioning_velocity_right_rad_per_sec: float = -3.0
+    tensioning_velocity_right_rad_per_sec: float = 3.0
 
     # |LPF(torque)| at which tensioning stops -- TORQUE_THRESHOLD.
     torque_threshold_nm: float = 0.85
