@@ -70,12 +70,6 @@ class RecordData:
     # the derived state also avoids recording a status that lags them.
     tension_switch: bool = False
 
-    # DIAGNOSTIC, temporary: the full Euler decomposition per leg, to identify
-    # which component tracks hip flexion. Defaulted like the fields above so
-    # only the exosuit's own recording path has to supply them.
-    euler_left: tuple[float, float, float] = (math.nan, math.nan, math.nan)
-    euler_right: tuple[float, float, float] = (math.nan, math.nan, math.nan)
-
 
 class RecordDataColumnNames(StrEnum):
     """Container for the measurements from the sensor of both lower limbs."""
@@ -107,20 +101,6 @@ class RecordDataColumnNames(StrEnum):
     BASELINE_OFFSET_RAD_LEFT = "baseline_offset_left (rad)"
     BASELINE_OFFSET_RAD_RIGHT = "baseline_offset_right (rad)"
     TENSION_SWITCH = "tension_switch"
-
-    # DIAGNOSTIC, temporary. The angle handed to the controller is
-    # quat.to_euler(seq="xyz").z, which is yaw about the world vertical -- it
-    # gimbal-locks at 90 degrees of flexion and drifts without a magnetometer,
-    # and a bench recording showed it ratcheting through 703 degrees for
-    # motions that returned to neutral. gyro.z tracks the movement correctly,
-    # so the flexion axis is the sensor's own z; these columns exist to find
-    # which Euler component corresponds to it. Remove once the axis is chosen.
-    EULER_X_LEFT = "euler_x_left (rad)"
-    EULER_Y_LEFT = "euler_y_left (rad)"
-    EULER_Z_LEFT = "euler_z_left (rad)"
-    EULER_X_RIGHT = "euler_x_right (rad)"
-    EULER_Y_RIGHT = "euler_y_right (rad)"
-    EULER_Z_RIGHT = "euler_z_right (rad)"
 
 
 class CSVWriter:
@@ -242,12 +222,6 @@ class CSVWriter:
             RecordDataColumnNames.BASELINE_OFFSET_RAD_LEFT.value: data.baseline_offset_rad_left,
             RecordDataColumnNames.BASELINE_OFFSET_RAD_RIGHT.value: data.baseline_offset_rad_right,
             RecordDataColumnNames.TENSION_SWITCH.value: float(data.tension_switch),
-            RecordDataColumnNames.EULER_X_LEFT.value: data.euler_left[0],
-            RecordDataColumnNames.EULER_Y_LEFT.value: data.euler_left[1],
-            RecordDataColumnNames.EULER_Z_LEFT.value: data.euler_left[2],
-            RecordDataColumnNames.EULER_X_RIGHT.value: data.euler_right[0],
-            RecordDataColumnNames.EULER_Y_RIGHT.value: data.euler_right[1],
-            RecordDataColumnNames.EULER_Z_RIGHT.value: data.euler_right[2],
         }
 
     def save_data(self, output_dir: Path = RECORDINGS_DIR) -> Path:
