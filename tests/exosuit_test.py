@@ -2,6 +2,7 @@
 
 import math
 import time
+from types import SimpleNamespace
 
 from exosuit_python.csv_writer import RecordDataColumnNames, SensorSignal
 from exosuit_python.definitions import (
@@ -525,5 +526,134 @@ def test_the_damping_gain_is_bounded_too():
     command = motor.last_mit_command
     assert command is not None
     assert command["kd"] == MotorSaturation.kd[1]
+
+    exosuit._cleanup()
+
+
+def test_neither_limb_is_reversed_on_this_suit():
+    """hip-controller mirrors the right limb by default; this suit must not.
+
+    That default exists for rigs whose two motors are mounted opposite each
+    other. Bench recordings on 2026-09-18 showed this suit is not such a rig:
+    a positive command wound the cable in on both motors, and flexion raised
+    the angle and the velocity on both legs alike. With nothing inverted the
+    flag has nothing to cancel, and leaving it set inverts the right leg's
+    assist on its own -- silently, since an inverted assist still produces a
+    plausible-looking command.
+    """
+    exosuit = _mock_exosuit(record=False)
+
+    assert exosuit.controller_config.left_limb_reverse is False
+    assert exosuit.controller_config.right_limb_reverse is False
+
+    exosuit._cleanup()
+
+
+def test_fresh_feedback_is_read_without_sending_a_request():
+    """Reading torque must not poke the motor while it is being driven.
+
+    get_current() sends a status request and blocks on the reply, and that
+    request frame is byte-identical to the MIT enable frame -- so polling
+    twice a tick interleaves enter-motor-mode frames with the keep-alive
+    thread's velocity commands. Every MIT command already draws a feedback
+    frame, so the value is in hand and costs nothing to read.
+    """
+    exosuit = _mock_exosuit(record=False)
+    motor = _mock_motor(exosuit)
+    # The cache a real CAN motor keeps, which the mock has no reason to.
+    motor._last_feedback = SimpleNamespace(current_amps=0.42)
+    motor._last_feedback_monotonic = time.monotonic()
+    before = motor.get_current_calls
+
+    assert exosuit._read_torque(motor) == 0.42
+    assert motor.get_current_calls == before
+
+    exosuit._cleanup()
+
+
+def test_stale_feedback_falls_back_to_a_real_request():
+    """A motor that has stopped answering is exactly when a request is worth it."""
+    exosuit = _mock_exosuit(record=False)
+    motor = _mock_motor(exosuit)
+    motor._last_feedback = SimpleNamespace(current_amps=0.42)
+    motor._last_feedback_monotonic = time.monotonic() - 10.0
+    before = motor.get_current_calls
+
+    exosuit._read_torque(motor)
+
+    assert motor.get_current_calls == before + 1
+
+    exosuit._cleanup()
+
+
+def test_a_motor_with_no_cache_still_reads():
+    """Nothing may depend on a transport detail the mock does not have."""
+    exosuit = _mock_exosuit(record=False)
+    motor = _mock_motor(exosuit)
+
+    assert exosuit._read_torque(motor) is not None
+
+    exosuit._cleanup()
+
+
+def test_a_late_tick_cannot_rail_the_filter():
+    """Real elapsed time, but capped.
+
+    The loop does not keep its nominal period -- a bench run measured a worst
+    case of 229 ms against a 10 ms target -- so the chart is stepped with the
+    time that actually passed. Uncapped, a stall would hand a 25 rad/s filter
+    a step of hundreds of milliseconds and rail it.
+    """
+    exosuit = _mock_exosuit(record=False)
+    nominal = 1 / exosuit.config.frequency
+
+    exosuit._last_pretension_tick = None
+    assert exosuit._elapsed_since_last_tick() == nominal
+
+    exosuit._last_pretension_tick = time.monotonic() - 5.0
+    capped = exosuit._elapsed_since_last_tick()
+
+    assert capped == TensionConfig.max_time_step_periods * nominal
+    assert capped < 5.0
+
+    exosuit._cleanup()
+
+
+def test_the_loop_paces_on_a_schedule_not_a_fixed_delay():
+    """Sleeping a whole period after the work makes the rate unreachable.
+
+    A bench run measured 78.6 Hz against 100 Hz configured, the period being
+    the sleep plus however long the work took. That is not cosmetic:
+    BasicConfig is handed the configured value and hip-controller derives its
+    notches and baseline window from it, so a loop running a fifth slower than
+    it claims mistunes the whole filter chain.
+    """
+    exosuit = _mock_exosuit(record=False)
+    period = 1 / exosuit.config.frequency
+
+    # A tick whose work took most of the period should sleep only the rest.
+    due = time.monotonic() - period * 0.8
+    started = time.monotonic()
+    next_due = exosuit._sleep_until_due(due)
+    slept = time.monotonic() - started
+
+    assert slept < period * 0.5
+    assert next_due == due + period
+
+    exosuit._cleanup()
+
+
+def test_a_late_tick_restarts_the_schedule_instead_of_catching_up():
+    """Bursting back-to-back iterations is the wrong answer to falling behind."""
+    exosuit = _mock_exosuit(record=False)
+    period = 1 / exosuit.config.frequency
+
+    overdue = time.monotonic() - period * 50
+    started = time.monotonic()
+    next_due = exosuit._sleep_until_due(overdue)
+
+    assert time.monotonic() - started < period  # did not sleep
+    assert next_due >= started  # rebased on now, not on the missed schedule
+    assert next_due < started + period
 
     exosuit._cleanup()

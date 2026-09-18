@@ -75,10 +75,19 @@ class TensionConfig:
     involved, which is why none appears here.
     """
 
-    # Velocity command per leg. The legs are mirrored, so the signs differ --
-    # TENSION_VEL_LEFT = +3.0 and TENSION_VEL_RIGHT = -3.0 upstream.
+    # Both legs pull positive. The rig's motors are mounted mirrored, which
+    # is why it needs TENSION_VEL_LEFT = +3.0 against TENSION_VEL_RIGHT =
+    # -3.0; this suit's are not. Bench-checked on 2026-09-18: a positive
+    # command shortened the cable on both motors, so a negative one here would
+    # have paid the right tendon out, and its chart would have run to the STOP
+    # hold without ever building tension.
+    #
+    # Nothing ties this to the assist path's own mirroring, which lives in
+    # hip-controller's right_limb_reverse and is set independently -- see the
+    # note there. The two are separate because tensioning drives both tendons
+    # the same way while assist drives the hips anti-phase.
     tensioning_velocity_left_rad_per_sec: float = 3.0
-    tensioning_velocity_right_rad_per_sec: float = -3.0
+    tensioning_velocity_right_rad_per_sec: float = 3.0
 
     # |LPF(torque)| at which tensioning stops -- TORQUE_THRESHOLD.
     torque_threshold_nm: float = 0.85
@@ -96,6 +105,19 @@ class TensionConfig:
     # Torque-feedback low-pass filter -- TENSION_LPF_WN / TENSION_LPF_ZT.
     torque_lpf_cutoff_rad_per_sec: float = 25.0
     torque_lpf_damping_ratio: float = 1.0
+
+    # How old the cached CAN feedback may be before the torque is fetched with
+    # a blocking request instead. The keep-alive thread refreshes it at the
+    # motor control rate, so it is normally a few milliseconds old; this only
+    # has to be loose enough not to trip on ordinary jitter.
+    torque_staleness_s: float = 0.05
+
+    # Ceiling on the measured time step handed to the filter and the STOP
+    # timer, as a multiple of the nominal period. Using real elapsed time is
+    # what keeps them honest when the loop runs late, but a long stall would
+    # otherwise push a step of hundreds of milliseconds into a 25 rad/s filter
+    # and rail it -- the same failure the SOGI dt clamp exists for upstream.
+    max_time_step_periods: float = 3.0
 
 
 @dataclass(frozen=True)
@@ -142,6 +164,32 @@ class MotorSaturation:
     kp: tuple[float, float] = (0.0, 500.0)
     kd: tuple[float, float] = (0.0, 5.0)
     torque_nm: tuple[float, float] = (-9.0, 9.0)
+
+
+@dataclass(frozen=True)
+class IMUMounting:
+    """How this suit's IMUs sit, where that changes the signal's sign.
+
+    Bench-measured on 2026-09-18 by flexing each hip in turn and comparing the
+    two channels against each other.
+
+    ``gyro.z`` is read in the sensor's own frame, so a board mounted the other
+    way round reports the opposite sign; the reported angle is not affected,
+    because the fusion resolves orientation against gravity and a thigh at a
+    given angle tilts the same way whichever way its board faces. On this suit
+    that makes the two channels disagree on the right leg -- measured
+    ``d(euler_y)/dt = +0.885 * gyro.z`` on the left against ``-0.898`` on the
+    right -- and the controller reads angle against velocity as a phase
+    portrait, so a disagreement reflects that leg into the wrong quadrant
+    rather than failing outright.
+
+    These signs bring the velocity back into agreement with the angle. They
+    say nothing about the motors, which were measured separately and are not
+    mirrored, nor about hip-controller's ``right_limb_reverse``.
+    """
+
+    gyro_sign_left: float = 1.0
+    gyro_sign_right: float = -1.0
 
 
 class TensionState(IntEnum):

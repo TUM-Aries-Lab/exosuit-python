@@ -1,5 +1,7 @@
 """Mock motor for CI testing."""
 
+from typing import Any
+
 from loguru import logger
 
 
@@ -30,6 +32,12 @@ class MockMotor:
         self.stop_calls = 0
         self.pull_commands = 0
         self.get_current_calls = 0
+        #: The feedback cache the CAN transport keeps, which the exosuit reads
+        #: in preference to sending a request. Present here so tests can
+        #: exercise both the cached and the fallback path; None means "no
+        #: cache", which is the plain mock's normal state.
+        self._last_feedback: Any | None = None
+        self._last_feedback_monotonic: float = 0.0
 
     def set_velocity(self, velocity_erpm: int) -> None:
         """Set mock motor velocity."""
