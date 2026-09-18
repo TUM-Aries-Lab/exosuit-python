@@ -15,6 +15,7 @@ from exosuit_python.definitions import (
     TENSION_SWITCH,
     IMUConfig,
     MotorCommandConfig,
+    MotorSaturation,
     TensionConfig,
 )
 from exosuit_python.exosuit import Exosuit, ExosuitConfig, ExosuitStates
@@ -467,5 +468,62 @@ def test_releasing_the_switch_leaves_pretensioning_even_if_it_never_armed():
 
     assert exosuit._status == ExosuitStates.STANDBY
     assert _mock_motor(exosuit).stop_calls >= 1
+
+    exosuit._cleanup()
+
+
+def test_an_excessive_velocity_command_is_saturated():
+    """The assist command is bounded before it reaches the motor.
+
+    The rig saturates inside pack_mit_command(); this repo had no equivalent,
+    and once the command stopped being divided by 126 the only remaining limit
+    was the motor profile's own +/-76 rad/s.
+    """
+    exosuit = _mock_exosuit(record=False)
+    motor = _mock_motor(exosuit)
+    limit = MotorSaturation.velocity_rad_per_sec[1]
+
+    exosuit._command_velocity(motor, limit + 30.0)
+    command = motor.last_mit_command
+    assert command is not None
+    assert command["vel_rad_s"] == limit
+
+    exosuit._command_velocity(motor, -limit - 30.0)
+    command = motor.last_mit_command
+    assert command is not None
+    assert command["vel_rad_s"] == -limit
+
+    exosuit._cleanup()
+
+
+def test_ordinary_commands_pass_through_untouched():
+    """Saturation must not quietly reshape commands that were already legal."""
+    exosuit = _mock_exosuit(record=False)
+    motor = _mock_motor(exosuit)
+
+    for velocity in (
+        0.0,
+        2.5,
+        -2.5,
+        TensionConfig.tensioning_velocity_left_rad_per_sec,
+    ):
+        exosuit._command_velocity(motor, velocity)
+        command = motor.last_mit_command
+        assert command is not None
+        assert command["vel_rad_s"] == velocity
+
+    exosuit._cleanup()
+
+
+def test_the_damping_gain_is_bounded_too():
+    """Kd is packed against a 0..5 range, so an out-of-range value is clamped."""
+    exosuit = _mock_exosuit(record=False)
+    motor = _mock_motor(exosuit)
+
+    exosuit._command_velocity(motor, 2.0, velocity_kd=99.0)
+
+    command = motor.last_mit_command
+    assert command is not None
+    assert command["kd"] == MotorSaturation.kd[1]
 
     exosuit._cleanup()
