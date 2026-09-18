@@ -30,6 +30,12 @@ hw = [
   "adafruit-extended-bus>=1.0.2",
   "adafruit-circuitpython-bno055>=5.4.20",
   "adafruit-circuitpython-lsm6ds>=4.5.18",
+  # The detected sensors are LSM6DSOX_LIS3MDL combo boards. lsm6ds covers the
+  # accelerometer and gyroscope; the LIS3MDL magnetometer needs its own
+  # driver, and imu-python imports it while initialising the sensor -- before
+  # it decides whether to use magnetometer readings at all. Without it the
+  # sensors are detected, matched, and then fail to start.
+  "adafruit-circuitpython-lis3mdl>=1.2.8",
 ]
 no_hw = [
 ]
