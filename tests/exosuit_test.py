@@ -559,4 +559,21 @@ def test_a_mock_exosuit_selects_the_mock_imu_config():
 
     assert exosuit._imu_cfg.left_leg_descr.name == MOCK_NAME
 
+
+def test_neither_limb_is_reversed_on_this_suit():
+    """hip-controller mirrors the right limb by default; this suit must not.
+
+    That default exists for rigs whose two motors are mounted opposite each
+    other. Bench recordings on 2026-09-18 showed this suit is not such a rig:
+    a positive command wound the cable in on both motors, and flexion raised
+    the angle and the velocity on both legs alike. With nothing inverted the
+    flag has nothing to cancel, and leaving it set inverts the right leg's
+    assist on its own -- silently, since an inverted assist still produces a
+    plausible-looking command.
+    """
+    exosuit = _mock_exosuit(record=False)
+
+    assert exosuit.controller_config.left_limb_reverse is False
+    assert exosuit.controller_config.right_limb_reverse is False
+
     exosuit._cleanup()
