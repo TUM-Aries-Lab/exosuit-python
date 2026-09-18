@@ -19,6 +19,7 @@ from exosuit_python.definitions import (
 )
 from exosuit_python.exosuit import Exosuit, ExosuitConfig, ExosuitStates
 from exosuit_python.gpio import MockGPIO
+from exosuit_python.motor import MockMotor
 
 
 def test_exosuit_initialization():
@@ -292,6 +293,19 @@ def test_a_switch_edge_signals_the_handler():
     assert exosuit._switch_event.is_set()
 
 
+def _mock_motor(exosuit: Exosuit) -> MockMotor:
+    """Return the left motor, narrowed to the mock these tests build.
+
+    Exosuit types its motors as ``CubeMarsAK806v2CAN | MockMotor``, and the
+    recorded command only exists on the mock, so the union has to be narrowed
+    before it can be read. The assert doubles as a check that the fixture
+    really did build a mock rather than reaching for CAN hardware.
+    """
+    motor = exosuit.motor_left
+    assert isinstance(motor, MockMotor)
+    return motor
+
+
 def test_velocity_commands_go_out_in_rad_per_sec_unscaled():
     """The assist command must reach the motor as rad/s, at full scale.
 
@@ -303,9 +317,11 @@ def test_velocity_commands_go_out_in_rad_per_sec_unscaled():
     """
     exosuit = _mock_exosuit(record=False)
 
-    exosuit._command_velocity(exosuit.motor_left, 2.5)
+    motor = _mock_motor(exosuit)
 
-    command = exosuit.motor_left.last_mit_command
+    exosuit._command_velocity(motor, 2.5)
+
+    command = motor.last_mit_command
     assert command is not None
     assert command["vel_rad_s"] == 2.5
     assert command["kp"] == MotorCommandConfig.kp
@@ -324,9 +340,11 @@ def test_a_zero_velocity_command_does_not_tear_down_mit_mode():
     """
     exosuit = _mock_exosuit(record=False)
 
-    exosuit._command_velocity(exosuit.motor_left, 0.0)
+    motor = _mock_motor(exosuit)
 
-    command = exosuit.motor_left.last_mit_command
+    exosuit._command_velocity(motor, 0.0)
+
+    command = motor.last_mit_command
     assert command is not None
     assert command["vel_rad_s"] == 0.0
 
@@ -337,11 +355,11 @@ def test_pretensioning_uses_its_own_damping_gain():
     """The two regimes keep independent Kd knobs."""
     exosuit = _mock_exosuit(record=False)
 
-    exosuit._command_velocity(
-        exosuit.motor_left, 3.0, velocity_kd=TensionConfig.mit_velocity_kd
-    )
+    motor = _mock_motor(exosuit)
 
-    command = exosuit.motor_left.last_mit_command
+    exosuit._command_velocity(motor, 3.0, velocity_kd=TensionConfig.mit_velocity_kd)
+
+    command = motor.last_mit_command
     assert command is not None
     assert command["kd"] == TensionConfig.mit_velocity_kd
 
