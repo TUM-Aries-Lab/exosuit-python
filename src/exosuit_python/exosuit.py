@@ -197,6 +197,10 @@ class Exosuit:
         # reported on the edge rather than once per tick.
         self._velocity_was_clamped = False
 
+        # Wall clock of the previous pre-tensioning tick, so the chart is
+        # stepped with the time that actually passed. None between sessions.
+        self._last_pretension_tick: float | None = None
+
         # initialization calls
         if not self._initialize_imus():
             logger.error("IMU initialization failed. Exosuit not started.")
@@ -817,14 +821,14 @@ class Exosuit:
             # PRETENSIONING, pulling the tendon tighter on every cycle.
             return
 
-        time_difference = 1 / self.config.frequency
+        time_difference = self._elapsed_since_last_tick()
         on_off = int(self._tension_switch)
 
         for motor, tensioner in (
             (self.motor_left, self._tensioner_left),
             (self.motor_right, self._tensioner_right),
         ):
-            torque_nm = motor.get_current()
+            torque_nm = self._read_torque(motor)
             if torque_nm is None:
                 # Without feedback the chart is blind to its own threshold,
                 # and pulling a tendon with no way to know when to stop is the
@@ -851,6 +855,61 @@ class Exosuit:
                 # the other leg is still pulling would stall the loop and feed
                 # a wrong dt to the still-running leg's filter and hold timer.
                 motor.stop()
+
+    def _elapsed_since_last_tick(self) -> float:
+        """Return the time since the previous pre-tensioning tick, in seconds.
+
+        The chart's low-pass filter and its STOP hold are both rate dependent,
+        and this loop does not keep its nominal period: a bench run measured a
+        median of 11.6 ms against a 10 ms target, a 95th percentile of 23.8 ms
+        and a worst case of 229 ms, with 14% of ticks over budget. Telling the
+        filter every step was 10 ms made it lag, and stretched a "1 second"
+        hold well past a second of wall clock.
+
+        The step is capped even so. A stall would otherwise hand a 25 rad/s
+        filter a step of hundreds of milliseconds and rail it, which is the
+        failure the SOGI dt clamp exists for upstream; a late tick should cost
+        accuracy, not stability.
+
+        :return: Seconds since the previous tick, clamped, or the nominal
+            period on the first tick of a session.
+        :rtype: float
+        """
+        nominal = 1 / self.config.frequency
+        now = time.monotonic()
+        previous, self._last_pretension_tick = self._last_pretension_tick, now
+        if previous is None:
+            return nominal
+        return min(now - previous, TensionConfig.max_time_step_periods * nominal)
+
+    def _read_torque(self, motor) -> float | None:
+        """Return this leg's torque in N*m, preferring feedback already in hand.
+
+        ``get_current()`` is not a read: it sends a status request and blocks
+        on the reply for up to half a second. Worse, that request frame is
+        byte-identical to the MIT enable frame -- the CubeMars manual uses the
+        same frame for both -- so polling twice a tick interleaves ~170
+        enter-motor-mode frames a second with the keep-alive thread's velocity
+        commands. That is the likely source of the juddering seen on the first
+        bench pull, and of the loop stutter measured alongside it.
+
+        None of it is necessary while the motor is being driven: every MIT
+        command draws a feedback frame, which the transport already parses and
+        caches. Reading that cache costs nothing and disturbs nothing. The
+        blocking path stays as a fallback for when the cache has gone stale --
+        a motor that has stopped answering -- which is exactly when a real
+        request is worth its cost.
+
+        :param motor: The motor to read.
+        :return: Torque in N*m, or None if no feedback can be obtained.
+        :rtype: float or None
+        """
+        feedback = getattr(motor, "_last_feedback", None)
+        if feedback is not None:
+            age = time.monotonic() - getattr(motor, "_last_feedback_monotonic", 0.0)
+            if age <= TensionConfig.torque_staleness_s:
+                return feedback.current_amps
+        return motor.get_current()
 
     def _release_motors(self) -> None:
         """Stop both motors, releasing the tendons.
@@ -882,6 +941,9 @@ class Exosuit:
         """
         self._tensioner_left.reset()
         self._tensioner_right.reset()
+        # The next session measures its first step from its own start, not
+        # from whenever this one happened to end.
+        self._last_pretension_tick = None
 
     def _initialize_imus(self) -> bool:
         """Initialize IMUs.

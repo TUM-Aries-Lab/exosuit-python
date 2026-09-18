@@ -2,6 +2,7 @@
 
 import math
 import time
+from types import SimpleNamespace
 
 from exosuit_python.csv_writer import RecordDataColumnNames, SensorSignal
 from exosuit_python.definitions import (
@@ -544,5 +545,75 @@ def test_neither_limb_is_reversed_on_this_suit():
 
     assert exosuit.controller_config.left_limb_reverse is False
     assert exosuit.controller_config.right_limb_reverse is False
+
+    exosuit._cleanup()
+
+
+def test_fresh_feedback_is_read_without_sending_a_request():
+    """Reading torque must not poke the motor while it is being driven.
+
+    get_current() sends a status request and blocks on the reply, and that
+    request frame is byte-identical to the MIT enable frame -- so polling
+    twice a tick interleaves enter-motor-mode frames with the keep-alive
+    thread's velocity commands. Every MIT command already draws a feedback
+    frame, so the value is in hand and costs nothing to read.
+    """
+    exosuit = _mock_exosuit(record=False)
+    motor = _mock_motor(exosuit)
+    # The cache a real CAN motor keeps, which the mock has no reason to.
+    motor._last_feedback = SimpleNamespace(current_amps=0.42)
+    motor._last_feedback_monotonic = time.monotonic()
+    before = motor.get_current_calls
+
+    assert exosuit._read_torque(motor) == 0.42
+    assert motor.get_current_calls == before
+
+    exosuit._cleanup()
+
+
+def test_stale_feedback_falls_back_to_a_real_request():
+    """A motor that has stopped answering is exactly when a request is worth it."""
+    exosuit = _mock_exosuit(record=False)
+    motor = _mock_motor(exosuit)
+    motor._last_feedback = SimpleNamespace(current_amps=0.42)
+    motor._last_feedback_monotonic = time.monotonic() - 10.0
+    before = motor.get_current_calls
+
+    exosuit._read_torque(motor)
+
+    assert motor.get_current_calls == before + 1
+
+    exosuit._cleanup()
+
+
+def test_a_motor_with_no_cache_still_reads():
+    """Nothing may depend on a transport detail the mock does not have."""
+    exosuit = _mock_exosuit(record=False)
+    motor = _mock_motor(exosuit)
+
+    assert exosuit._read_torque(motor) is not None
+
+    exosuit._cleanup()
+
+
+def test_a_late_tick_cannot_rail_the_filter():
+    """Real elapsed time, but capped.
+
+    The loop does not keep its nominal period -- a bench run measured a worst
+    case of 229 ms against a 10 ms target -- so the chart is stepped with the
+    time that actually passed. Uncapped, a stall would hand a 25 rad/s filter
+    a step of hundreds of milliseconds and rail it.
+    """
+    exosuit = _mock_exosuit(record=False)
+    nominal = 1 / exosuit.config.frequency
+
+    exosuit._last_pretension_tick = None
+    assert exosuit._elapsed_since_last_tick() == nominal
+
+    exosuit._last_pretension_tick = time.monotonic() - 5.0
+    capped = exosuit._elapsed_since_last_tick()
+
+    assert capped == TensionConfig.max_time_step_periods * nominal
+    assert capped < 5.0
 
     exosuit._cleanup()
