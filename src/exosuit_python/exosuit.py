@@ -36,6 +36,7 @@ from exosuit_python.definitions import (
     THREAD_JOIN_TIMEOUT,
     ExosuitStates,
     IMUConfig,
+    IMUMounting,
     InclinationModes,
     MotorCommandConfig,
     MotorSaturation,
@@ -621,6 +622,18 @@ class Exosuit:
         Each limb keeps its own IMU timestamp; the row is stamped with the
         left one.
 
+        The angle is the ``y`` component, not ``z``. ``z`` is yaw about the
+        world vertical: it gimbal-locks at 90 degrees of flexion, drifts with
+        the magnetometer disabled, and in a bench recording ratcheted through
+        703 degrees of movements that all returned to neutral, taking a single
+        108-degree step between samples. ``y`` is the thigh's tilt against
+        gravity -- it tracked the same session cleanly, resting near -80
+        degrees and rising to about 0 at full flexion with no wrapping, and
+        its derivative matches the gyro at |r| > 0.91 on both legs.
+
+        The gyro sign is per leg because ``gyro.z`` is read in the sensor's
+        frame while the angle is resolved against gravity; see IMUMounting.
+
         :param data_left: Reading from the left IMU.
         :param data_right: Reading from the right IMU.
         :return: ``(left, right)`` raw signals.
@@ -628,13 +641,17 @@ class Exosuit:
         """
         return (
             SensorSignal(
-                angle_rad=data_left.quat.to_euler(seq="xyz").z,
-                velocity_rad_per_sec=data_left.device_data.gyro.z,
+                angle_rad=data_left.quat.to_euler(seq="xyz").y,
+                velocity_rad_per_sec=(
+                    IMUMounting.gyro_sign_left * data_left.device_data.gyro.z
+                ),
                 timestamp=data_left.timestamp,
             ),
             SensorSignal(
-                angle_rad=data_right.quat.to_euler(seq="xyz").z,
-                velocity_rad_per_sec=data_right.device_data.gyro.z,
+                angle_rad=data_right.quat.to_euler(seq="xyz").y,
+                velocity_rad_per_sec=(
+                    IMUMounting.gyro_sign_right * data_right.device_data.gyro.z
+                ),
                 timestamp=data_right.timestamp,
             ),
         )
