@@ -106,6 +106,19 @@ class TensionConfig:
     torque_lpf_cutoff_rad_per_sec: float = 25.0
     torque_lpf_damping_ratio: float = 1.0
 
+    # How old the cached CAN feedback may be before the torque is fetched with
+    # a blocking request instead. The keep-alive thread refreshes it at the
+    # motor control rate, so it is normally a few milliseconds old; this only
+    # has to be loose enough not to trip on ordinary jitter.
+    torque_staleness_s: float = 0.05
+
+    # Ceiling on the measured time step handed to the filter and the STOP
+    # timer, as a multiple of the nominal period. Using real elapsed time is
+    # what keeps them honest when the loop runs late, but a long stall would
+    # otherwise push a step of hundreds of milliseconds into a 25 rad/s filter
+    # and rail it -- the same failure the SOGI dt clamp exists for upstream.
+    max_time_step_periods: float = 3.0
+
 
 @dataclass(frozen=True)
 class MotorCommandConfig:
