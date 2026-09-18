@@ -44,7 +44,7 @@ def main():
         logger.error("Jetson.GPIO unavailable. Run this on the Jetson.")
         return
 
-    GPIO.setmode(GPIO.BOARD)
+    GPIO.setmode(GPIO.TEGRA_SOC)
     for pin in SWITCH_PINS.values():
         GPIO.setup(pin, GPIO.IN)
 

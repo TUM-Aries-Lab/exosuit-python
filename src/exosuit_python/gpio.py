@@ -18,21 +18,24 @@ class MockGPIO:
     FALLING = 32
     BOTH = 33
     BOARD = 10
+    TEGRA_SOC = 1000
     PUD_UP = 22
 
     def __init__(self) -> None:
         self.gpio_running: bool = False
         self._threads: list[threading.Thread] = []
-        self._channel_states: dict[int, int] = {}  # Track current state (0=LOW, 1=HIGH)
+        self._channel_states: dict[
+            int | str, int
+        ] = {}  # Track current state (0=LOW, 1=HIGH)
         self._previous_states: dict[
-            int, int | None
+            int | str, int | None
         ] = {}  # Track previous state for edge detection
 
     def setmode(self, mode: int) -> None:
         """Set mode."""
         pass
 
-    def setup(self, channels: int, direction: int, pull_up_down: int = 0) -> None:
+    def setup(self, channels: int | str, direction: int, pull_up_down: int = 0) -> None:
         """Set up GPIO."""
         self.gpio_running = True
         # Initialize channel state(s) when set up
@@ -46,7 +49,7 @@ class MockGPIO:
 
     def add_event_detect(
         self,
-        channel: int,
+        channel: int | str,
         edge: int,
         callback: Callable | None = None,
         bouncetime: int | None = None,
@@ -73,13 +76,13 @@ class MockGPIO:
         for thread in self._threads:
             thread.join(timeout=THREAD_JOIN_TIMEOUT)
 
-    def simulate_switch(self, channel: int, state: int) -> None:
+    def simulate_switch(self, channel: int | str, state: int) -> None:
         """Simulate a switch state change (HIGH or LOW) to trigger edge detection."""
         self._channel_states[channel] = state
 
     def _loop_event_detect_thread(
         self,
-        channel: int,
+        channel: int | str,
         edge: int,
         callback: Callable | None = None,
         bouncetime: int | None = None,

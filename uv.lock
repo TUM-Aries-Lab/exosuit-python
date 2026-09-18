@@ -67,6 +67,20 @@ wheels = [
 ]
 
 [[package]]
+name = "adafruit-circuitpython-lis3mdl"
+version = "1.2.8"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "adafruit-blinka" },
+    { name = "adafruit-circuitpython-busdevice" },
+    { name = "adafruit-circuitpython-register" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/b4/3c/eb1bcaa675277cb55d9395195eba7e8836cd74a7dd5721ad59c49650d03a/adafruit_circuitpython_lis3mdl-1.2.8.tar.gz", hash = "sha256:e4ba8dbf93c0763279090584d36b80361e95ee92ea97c473ade8282c2e81bb94", size = 26748, upload-time = "2026-04-23T20:59:12.726Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f5/97/412b4f2d1f091a817a26ae0d292c337accd4266fb36c93498111a0df4e44/adafruit_circuitpython_lis3mdl-1.2.8-py3-none-any.whl", hash = "sha256:26652b0871392cddb74626834f2c35c4d62dbe1f3ad55d6de915433c376a2f01", size = 6879, upload-time = "2026-04-23T20:59:11.847Z" },
+]
+
+[[package]]
 name = "adafruit-circuitpython-lsm6ds"
 version = "4.6.1"
 source = { registry = "https://pypi.org/simple" }
@@ -562,6 +576,7 @@ dev = [
 ]
 hw = [
     { name = "adafruit-circuitpython-bno055" },
+    { name = "adafruit-circuitpython-lis3mdl" },
     { name = "adafruit-circuitpython-lsm6ds" },
     { name = "adafruit-extended-bus" },
     { name = "jetson-gpio" },
@@ -587,6 +602,7 @@ dev = [
 ]
 hw = [
     { name = "adafruit-circuitpython-bno055", specifier = ">=5.4.20" },
+    { name = "adafruit-circuitpython-lis3mdl", specifier = ">=1.2.8" },
     { name = "adafruit-circuitpython-lsm6ds", specifier = ">=4.5.18" },
     { name = "adafruit-extended-bus", specifier = ">=1.0.2" },
     { name = "jetson-gpio", specifier = ">=2.1.12" },

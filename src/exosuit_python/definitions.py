@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from enum import IntEnum, StrEnum
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 from imu_python.definitions import I2CBusID, IMUDescriptor
@@ -156,21 +157,56 @@ class TensionState(IntEnum):
 class IMUConfig:
     """IMU configuration dataclass containing busID, IMU name and index for each leg."""
 
-    left_leg_bus: int = I2CBusID.bus_7
+    # The real sensors, as detect_and_create() reports them on this rig. A
+    # leg matches only when bus, name and index all agree, and the placeholder
+    # these replaced said name="MOCK", so nothing could ever match and both
+    # legs failed initialisation with the IMUs sitting there detected.
+    #
+    # Note the two are on *different* buses. imu-python names a sensor
+    # "{imu_name}_{imu_index}_{bus_id}", so the detected LSM6DSOX_LIS3MDL_0_1
+    # and LSM6DSOX_LIS3MDL_1_7 are index 0 on bus 1 and index 1 on bus 7.
+    # Pinning both to one bus was the second half of the mismatch.
+    #
+    # TO CONFIRM: which physical leg each sensor is on. Bus and index say
+    # nothing about anatomy, so this assignment is a guess until someone
+    # flexes one hip and checks which raw angle trace moves.
+    left_leg_bus: int = I2CBusID.bus_1
     left_leg_descr: IMUDescriptor = field(
-        default_factory=lambda: IMUDescriptor(name="MOCK", index=0)
+        default_factory=lambda: IMUDescriptor(name="LSM6DSOX_LIS3MDL", index=0)
     )
     right_leg_bus: int = I2CBusID.bus_7
     right_leg_descr: IMUDescriptor = field(
-        default_factory=lambda: IMUDescriptor(name="MOCK", index=1)
-    )  # TODO: set actual IMUs
+        default_factory=lambda: IMUDescriptor(name="LSM6DSOX_LIS3MDL", index=1)
+    )
 
 
-# Switch pins
-OPERATION_SWITCH = 15
-TENSION_SWITCH = 7
-MODE_SWITCH_1 = 29
-MODE_SWITCH_2 = 32
+# Switch pins, named in TEGRA_SOC mode with the BOARD number that was
+# verified against the wiring kept alongside.
+#
+# The mode is not a free choice. Jetson.GPIO allows one mode per process and
+# raises "A different mode has already been set!" on a second, different one.
+# Importing any Adafruit register-based IMU driver pulls in Blinka, whose
+# tegra/t234/pin.py calls setmode(TEGRA_SOC) at import time -- by way of
+# circuitpython_typing.device_drivers, which imports SPIDevice at module level
+# purely for type annotations, with no TYPE_CHECKING guard. So BOARD here and
+# an IMU driver anywhere cannot coexist, whichever loads first.
+#
+# Matching Blinka resolves it: setmode() only raises when the modes differ, so
+# with TEGRA_SOC set here Blinka's call becomes a no-op. The names come from
+# Jetson.GPIO's own pin table for JETSON_ORIN_NANO, read off the same
+# definition row as the BOARD number, so they are a translation and not a
+# second source of truth.
+# Typed Any deliberately. Jetson.GPIO annotates a channel as int, which
+# describes BOARD and BCM; in TEGRA_SOC mode the channel is the pin's name and
+# the library accepts it, because its channel table is keyed by whatever the
+# selected mode uses. Any keeps that honest rather than claiming an int these
+# are not, and avoids scattering ignores over every call site.
+SwitchChannel = Any
+
+OPERATION_SWITCH: SwitchChannel = "GP88_PWM1"  # BOARD 15
+TENSION_SWITCH: SwitchChannel = "GP167"  # BOARD 7
+MODE_SWITCH_1: SwitchChannel = "GP65"  # BOARD 29
+MODE_SWITCH_2: SwitchChannel = "GP113_PWM7"  # BOARD 32
 
 # Debounce window for the two edge-detected switches, in milliseconds.
 #
