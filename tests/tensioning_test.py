@@ -40,8 +40,16 @@ def test_holding_the_switch_pulls_at_the_leg_velocity():
     assert enable == 1
 
 
-def test_the_legs_pull_in_opposite_directions():
-    """The legs are mirrored, so their velocity commands differ in sign."""
+def test_both_legs_wind_their_tendon_in():
+    """Both legs must pull, whatever sign that takes on this suit.
+
+    The rig's motors are mounted mirrored and so need opposite signs; this
+    suit's are not. Bench-checked on 2026-09-18: a positive command shortened
+    the cable on both motors. What matters is not the sign but that neither
+    leg pays its tendon out -- a leg driven the wrong way never reaches the
+    torque threshold, so its chart runs to the STOP hold having built no
+    tension at all, and spools slack until the switch is released.
+    """
     left = LegTensioner(CONFIG.tensioning_velocity_left_rad_per_sec)
     right = LegTensioner(CONFIG.tensioning_velocity_right_rad_per_sec)
 
@@ -49,7 +57,7 @@ def test_the_legs_pull_in_opposite_directions():
     right_velocity, _ = right.step(0.0, on_off=1, time_difference=DT)
 
     assert left_velocity > 0
-    assert right_velocity < 0
+    assert right_velocity > 0
 
 
 def test_releasing_the_switch_aborts_without_waiting_for_the_threshold():

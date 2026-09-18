@@ -186,6 +186,12 @@ class Exosuit:
         # reported on the edge rather than once per tick.
         self._velocity_was_clamped = False
 
+        # DIAGNOSTIC, temporary: the most recent Euler decomposition per leg,
+        # picked up by _record_sample. See _capture_euler.
+        nan3 = (math.nan, math.nan, math.nan)
+        self._euler_left: tuple[float, float, float] = nan3
+        self._euler_right: tuple[float, float, float] = nan3
+
         # initialization calls
         if not self._initialize_imus():
             logger.error("IMU initialization failed. Exosuit not started.")
@@ -502,6 +508,7 @@ class Exosuit:
         # stepping so the window is open for this sample.
         self._set_baseline_removal_trigger(self._operation_switch)
 
+        self._capture_euler(data_left, data_right)
         signal_left, signal_right = self._build_signals(
             data_left=data_left, data_right=data_right
         )
@@ -579,6 +586,34 @@ class Exosuit:
             torque_ff_nm=MotorCommandConfig.torque_ff_nm,
         )
 
+    def _capture_euler(self, data_left, data_right) -> None:
+        """DIAGNOSTIC, temporary. Stash the full Euler decomposition per leg.
+
+        The angle handed to the controller is ``to_euler(seq="xyz").z``, which
+        is yaw about the world vertical: it gimbal-locks at 90 degrees of
+        flexion and drifts freely without a magnetometer. A bench recording
+        showed it ratcheting through 703 degrees for movements that returned
+        to neutral, while integrating ``gyro.z`` reproduced them exactly -- so
+        the flexion axis is the sensor's own z, and the angle is simply read
+        off the wrong component.
+
+        Which component is right depends on py-imu's sequence convention,
+        which is easier to measure than to reason about. These columns let one
+        recording answer it: the correct one tracks the integrated gyro,
+        reaching about 90 degrees and returning to zero without wrapping.
+
+        Remove this, its fields on RecordData and its CSV columns once the
+        axis is chosen.
+
+        :param data_left: Reading from the left IMU.
+        :param data_right: Reading from the right IMU.
+        :return: None
+        """
+        left = data_left.quat.to_euler(seq="xyz")
+        right = data_right.quat.to_euler(seq="xyz")
+        self._euler_left = (left.x, left.y, left.z)
+        self._euler_right = (right.x, right.y, right.z)
+
     @staticmethod
     def _build_signals(data_left, data_right) -> tuple[SensorSignal, SensorSignal]:
         """Turn a pair of IMU readings into raw sensor signals.
@@ -629,6 +664,7 @@ class Exosuit:
         if data_left is None or data_right is None:
             return
 
+        self._capture_euler(data_left, data_right)
         raw_left, raw_right = self._build_signals(
             data_left=data_left, data_right=data_right
         )
@@ -703,6 +739,8 @@ class Exosuit:
                 motor_command_right=command_right,
                 operation_switch=self._operation_switch,
                 tension_switch=self._tension_switch,
+                euler_left=self._euler_left,
+                euler_right=self._euler_right,
                 baseline_offset_rad_left=self.controller_left.baseline_offset_rad,
                 baseline_offset_rad_right=self.controller_right.baseline_offset_rad,
             )
