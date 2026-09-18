@@ -17,7 +17,7 @@ from hip_controller.control.app import WalkOnController
 from hip_controller.definitions import BasicConfig, SensorSignal
 from imu_python.factory import IMUFactory
 from imu_python.sensor_manager import IMUManager
-from motor_python.cube_mars_motor import CubeMarsAK606v3
+from motor_python.cube_mars_motor_can import CubeMarsAK806v2CAN
 
 from exosuit_python.csv_writer import CSVWriter, RecordData
 from exosuit_python.definitions import (
@@ -28,6 +28,8 @@ from exosuit_python.definitions import (
     MODE_SWITCH_1,
     MODE_SWITCH_2,
     MODE_SWITCH_LOGIC,
+    MOTOR_CAN_ID_LEFT,
+    MOTOR_CAN_ID_RIGHT,
     OPERATION_SWITCH,
     SWITCH_EVENT_HANDLER_INTERVAL,
     TENSION_SWITCH,
@@ -35,12 +37,13 @@ from exosuit_python.definitions import (
     ExosuitStates,
     IMUConfig,
     InclinationModes,
+    MotorCommandConfig,
     SwitchStates,
     TensionConfig,
 )
 from exosuit_python.gpio import MockGPIO
 from exosuit_python.motor import MockMotor
-from exosuit_python.utils import convert_rad_per_sec_to_rpm
+from exosuit_python.tensioning import LegTensioner
 
 
 @dataclass
@@ -138,15 +141,35 @@ class Exosuit:
         # produces its own timestamped CSV rather than one file per process.
         self.csv_writer = CSVWriter()
 
-        self.motor_left: CubeMarsAK606v3 | MockMotor
-        self.motor_right: CubeMarsAK606v3 | MockMotor
+        self.motor_left: CubeMarsAK806v2CAN | MockMotor
+        self.motor_right: CubeMarsAK806v2CAN | MockMotor
 
         if self.config.mock_devices or self.config.test_gpio:
             self.motor_left = MockMotor()
             self.motor_right = MockMotor()
         else:
-            self.motor_left = CubeMarsAK606v3()
-            self.motor_right = CubeMarsAK606v3()
+            # AK80-6 over CAN. The MIT force-control protocol is what makes
+            # pre-tensioning possible at all: its feedback frame carries the
+            # torque the tensioning chart thresholds on. The UART servo path
+            # reports phase current instead, and cannot address two motors on
+            # one line -- its frame has no node ID field.
+            self.motor_left = CubeMarsAK806v2CAN(
+                motor_can_id=MOTOR_CAN_ID_LEFT,
+                mit_velocity_kd=MotorCommandConfig.velocity_kd,
+            )
+            self.motor_right = CubeMarsAK806v2CAN(
+                motor_can_id=MOTOR_CAN_ID_RIGHT,
+                mit_velocity_kd=MotorCommandConfig.velocity_kd,
+            )
+
+        # One tensioning chart per leg. The legs are mirrored, so they pull in
+        # opposite directions.
+        self._tensioner_left = LegTensioner(
+            TensionConfig.tensioning_velocity_left_rad_per_sec
+        )
+        self._tensioner_right = LegTensioner(
+            TensionConfig.tensioning_velocity_right_rad_per_sec
+        )
 
         # initialization calls
         if not self._initialize_imus():
@@ -372,11 +395,10 @@ class Exosuit:
             self._set_baseline_removal_trigger(False)
 
             # Pretensioning ticks at the control rate, like every other lap, so
-            # the recording keeps one row spacing for the whole run.
-            # TensionConfig.torque_check_interval described how often a stubbed
-            # torque value was re-read; the working implementation in
-            # receiver.py steps its tension regulator every tick instead, so
-            # that its median buffer and low-pass filter stay primed.
+            # the recording keeps one row spacing for the whole run. The chart
+            # and its torque low-pass filter are stepped every tick for the
+            # same reason the rig does: both are rate-dependent, and the STOP
+            # hold is counted in ticks rather than slept through.
             while self._status == ExosuitStates.PRETENSIONING:
                 try:
                     self._pretension()
@@ -448,9 +470,8 @@ class Exosuit:
         command_right = self.controller_right.step(curr_signal=signal_right)
         command_left = self.controller_left.step(curr_signal=signal_left)
 
-        self.motor_left.set_velocity(convert_rad_per_sec_to_rpm(command_left))
-
-        self.motor_right.set_velocity(convert_rad_per_sec_to_rpm(command_right))
+        self._command_velocity(self.motor_left, command_left)
+        self._command_velocity(self.motor_right, command_right)
 
         if self.config.record:
             self._record_sample(
@@ -461,6 +482,41 @@ class Exosuit:
                 ),
                 commands=(command_left, command_right),
             )
+
+    def _command_velocity(
+        self, motor, velocity_rad_per_sec: float, velocity_kd: float | None = None
+    ) -> None:
+        """Send a velocity-only MIT command, in rad/s at the output shaft.
+
+        ``WalkOnController.step`` returns a motor velocity command in rad/s,
+        and ``set_mit_mode`` takes rad/s, so the two meet directly. Going via
+        ``set_velocity`` instead would mean converting into ERPM and straight
+        back out, which is where two separate faults used to live:
+
+        * ``convert_rad_per_sec_to_rpm`` produced *mechanical* RPM while the
+          parameter it fed expects *electrical* RPM. The motor then divided by
+          pole pairs times gear ratio (21 * 6), so every assist command was
+          126 times too small -- and both quantities are plausible-looking
+          ints, so nothing caught it.
+        * ``set_velocity`` treats zero as a request to stop, and on this CAN
+          class ``stop()`` disables MIT mode. The assist command crosses zero
+          every stride, and anything under 0.105 rad/s truncated to zero, so
+          MIT mode would have been torn down and rebuilt continuously.
+
+        :param motor: The motor to command.
+        :param velocity_rad_per_sec: Output-shaft velocity command in rad/s.
+        :param velocity_kd: Damping gain for this command. Defaults to the
+            assist gain; pre-tensioning passes its own, so the two regimes
+            stay independently tunable.
+        :return: None
+        """
+        motor.set_mit_mode(
+            pos_rad=0.0,
+            vel_rad_s=velocity_rad_per_sec,
+            kp=MotorCommandConfig.kp,
+            kd=(MotorCommandConfig.velocity_kd if velocity_kd is None else velocity_kd),
+            torque_ff_nm=MotorCommandConfig.torque_ff_nm,
+        )
 
     @staticmethod
     def _build_signals(data_left, data_right) -> tuple[SensorSignal, SensorSignal]:
@@ -638,30 +694,76 @@ class Exosuit:
             self.csv_writer.reset()
 
     def _pretension(self) -> None:
-        """Execute one iteration of pretensioning loop."""
-        left_motor_torque = 0.85  # TODO place holder, get actual torque here
-        right_motor_torque = 0.85  # TODO place holder, get actual torque here
+        """Execute one iteration of the pre-tensioning loop.
 
-        # Only apply velocity if motor hasn't reached threshold
-        if left_motor_torque < TensionConfig.motor_torque_limit:
-            self.motor_left.set_velocity(TensionConfig.tensioning_velocity)
-        else:
-            self.motor_left.set_velocity(0)
+        Ported from ``motor_control.py`` (Subsystem3): each leg low-pass
+        filters its own torque feedback, rectifies it, and runs the four-state
+        chart in ``LegTensioner``. Pre-tensioning ends once both legs reach
+        DISABLE -- either because the wearer released the switch, or because
+        the torque threshold was met and the STOP hold has elapsed.
 
-        if right_motor_torque < TensionConfig.motor_torque_limit:
-            self.motor_right.set_velocity(TensionConfig.tensioning_velocity)
-        else:
-            self.motor_right.set_velocity(0)
+        :return: None
+        """
+        time_difference = 1 / self.config.frequency
+        on_off = int(self._tension_switch)
 
-        # Exit pretensioning when both motors reach threshold and switch is released
-        if (
-            left_motor_torque >= TensionConfig.motor_torque_limit
-            and right_motor_torque >= TensionConfig.motor_torque_limit
-            and not self._tension_switch
+        for motor, tensioner in (
+            (self.motor_left, self._tensioner_left),
+            (self.motor_right, self._tensioner_right),
         ):
-            time.sleep(TensionConfig.tensioning_timeout)
+            torque_nm = motor.get_current()
+            if torque_nm is None:
+                # Without feedback the chart is blind to its own threshold,
+                # and pulling a tendon with no way to know when to stop is the
+                # one thing this loop must not do. Abort rather than guess:
+                # the placeholder this replaced reported success instead.
+                logger.error("No torque feedback from a motor. Pre-tensioning aborted.")
+                self._abort_pretensioning()
+                return
+
+            velocity_rad_per_sec, enable = tensioner.step(
+                torque_nm, on_off, time_difference
+            )
+
+            if enable > 0:
+                self._command_velocity(
+                    motor,
+                    velocity_rad_per_sec,
+                    velocity_kd=TensionConfig.mit_velocity_kd,
+                )
+            elif tensioner.enable_changed:
+                # Only on the transition. The rig fires its enable/disable
+                # frames on edges, and the CAN stop() blocks for 60 ms of
+                # settling -- six ticks at 100 Hz. Calling it every lap while
+                # the other leg is still pulling would stall the loop and feed
+                # a wrong dt to the still-running leg's filter and hold timer.
+                motor.stop()
+
+        if self._tensioner_left.finished and self._tensioner_right.finished:
             logger.info("State change: pretensioning -> standby")
+            self._reset_tensioners()
             self._status = ExosuitStates.STANDBY
+
+    def _abort_pretensioning(self) -> None:
+        """Stop both motors and leave pre-tensioning without having tensioned.
+
+        :return: None
+        """
+        for motor in (self.motor_left, self.motor_right):
+            try:
+                motor.stop()
+            except Exception as err:
+                logger.error(f"Could not stop a motor: '{err}'.")
+        self._reset_tensioners()
+        self._status = ExosuitStates.STANDBY
+
+    def _reset_tensioners(self) -> None:
+        """Return both tensioning charts to RESET for the next session.
+
+        :return: None
+        """
+        self._tensioner_left.reset()
+        self._tensioner_right.reset()
 
     def _initialize_imus(self) -> bool:
         """Initialize IMUs.

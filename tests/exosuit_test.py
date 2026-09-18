@@ -14,6 +14,7 @@ from exosuit_python.definitions import (
     SWITCH_EVENT_HANDLER_INTERVAL,
     TENSION_SWITCH,
     IMUConfig,
+    MotorCommandConfig,
     TensionConfig,
 )
 from exosuit_python.exosuit import Exosuit, ExosuitConfig, ExosuitStates
@@ -52,7 +53,7 @@ def test_exosuit_switches():
     assert exosuit._status == ExosuitStates.PRETENSIONING
     # simulate tension switch OFF
     exosuit.gpio.simulate_switch(TENSION_SWITCH, exosuit.off_signal)
-    time.sleep(state_wait + TensionConfig.tensioning_timeout)
+    time.sleep(state_wait + TensionConfig.stop_hold_time)
     assert exosuit._status == ExosuitStates.STANDBY
     # simulate operation switch ON
     exosuit.gpio.simulate_switch(OPERATION_SWITCH, exosuit.on_signal)
@@ -289,3 +290,59 @@ def test_a_switch_edge_signals_the_handler():
     exosuit._switch_event.clear()
     exosuit._tension_callback(TENSION_SWITCH)
     assert exosuit._switch_event.is_set()
+
+
+def test_velocity_commands_go_out_in_rad_per_sec_unscaled():
+    """The assist command must reach the motor as rad/s, at full scale.
+
+    This pins the fix for a silent 126x error. The command used to be pushed
+    through convert_rad_per_sec_to_rpm(), which produced mechanical RPM for a
+    parameter documented as electrical RPM; the motor then divided by pole
+    pairs times gear ratio (21 * 6). Both quantities are plausible ints, so
+    nothing failed loudly -- the suit just assisted at a 126th of the command.
+    """
+    exosuit = _mock_exosuit(record=False)
+
+    exosuit._command_velocity(exosuit.motor_left, 2.5)
+
+    command = exosuit.motor_left.last_mit_command
+    assert command is not None
+    assert command["vel_rad_s"] == 2.5
+    assert command["kp"] == MotorCommandConfig.kp
+    assert command["kd"] == MotorCommandConfig.velocity_kd
+    assert command["torque_ff_nm"] == MotorCommandConfig.torque_ff_nm
+
+    exosuit._cleanup()
+
+
+def test_a_zero_velocity_command_does_not_tear_down_mit_mode():
+    """Zero assist must stay a command, not a stop.
+
+    ``set_velocity`` maps zero to ``stop()``, and on the CAN class ``stop()``
+    disables MIT mode. The assist command crosses zero every stride, so going
+    through that path would tear MIT mode down and rebuild it continuously.
+    """
+    exosuit = _mock_exosuit(record=False)
+
+    exosuit._command_velocity(exosuit.motor_left, 0.0)
+
+    command = exosuit.motor_left.last_mit_command
+    assert command is not None
+    assert command["vel_rad_s"] == 0.0
+
+    exosuit._cleanup()
+
+
+def test_pretensioning_uses_its_own_damping_gain():
+    """The two regimes keep independent Kd knobs."""
+    exosuit = _mock_exosuit(record=False)
+
+    exosuit._command_velocity(
+        exosuit.motor_left, 3.0, velocity_kd=TensionConfig.mit_velocity_kd
+    )
+
+    command = exosuit.motor_left.last_mit_command
+    assert command is not None
+    assert command["kd"] == TensionConfig.mit_velocity_kd
+
+    exosuit._cleanup()

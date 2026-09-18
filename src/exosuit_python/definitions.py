@@ -59,12 +59,73 @@ EXOSUIT_STANDBY_INTERVAL = 0.1
 
 @dataclass(frozen=True)
 class TensionConfig:
-    """Configurations for tensioning."""  # TODO: unit
+    """Pre-tensioning parameters, ported from ``motor_control.py``.
 
-    tensioning_velocity: int = 3
-    motor_torque_limit: float = 0.85  # tensioned when motor_torque >= 0.85
-    tensioning_timeout: float = 1.0  # in sec
-    torque_check_interval: float = 0.1  # in sec
+    The reference implementation is the Simulink port in the LocomotionMode
+    repository (``motor_control.py``, Subsystem3): the torque feedback is
+    low-pass filtered, rectified, and handed to a four-state chart that pulls
+    the tendon until the torque crosses a fixed threshold.
+
+    This resolves the old "TODO: unit". The units are the MIT force-control
+    protocol's own -- velocity in rad/s at the output shaft, torque in N*m.
+    ``CubeMarsAK806v2CAN.get_current()`` returns the MIT feedback field, which
+    motor-python decodes against the motor profile's ``t_min``/``t_max``, so
+    the value is a torque in N*m in spite of the name. No torque constant is
+    involved, which is why none appears here.
+    """
+
+    # Velocity command per leg. The legs are mirrored, so the signs differ --
+    # TENSION_VEL_LEFT = +3.0 and TENSION_VEL_RIGHT = -3.0 upstream.
+    tensioning_velocity_left_rad_per_sec: float = 3.0
+    tensioning_velocity_right_rad_per_sec: float = -3.0
+
+    # |LPF(torque)| at which tensioning stops -- TORQUE_THRESHOLD.
+    torque_threshold_nm: float = 0.85
+
+    # Seconds spent in STOP before DISABLE -- STOP_HOLD_TIME / after(1,sec).
+    stop_hold_time: float = 1.0
+
+    # MIT damping gain accompanying the velocity command -- MOTOR_KD_CMD.
+    # AK80_6_MOTOR_SPEC.mit_velocity_kd carries the same 1.0 for the same
+    # reason, but it is marked UNVERIFIED UNDER LOAD there: the bench run
+    # behind it was free-shaft with the tendon disconnected. Tensioning is a
+    # loaded condition, so confirm this on the assembled suit.
+    mit_velocity_kd: float = 1.0
+
+    # Torque-feedback low-pass filter -- TENSION_LPF_WN / TENSION_LPF_ZT.
+    torque_lpf_cutoff_rad_per_sec: float = 25.0
+    torque_lpf_damping_ratio: float = 1.0
+
+
+@dataclass(frozen=True)
+class MotorCommandConfig:
+    """MIT command gains for the running (assist) path.
+
+    These mirror ``motor_control.py``'s MOTOR_KP_CMD / MOTOR_KD_CMD /
+    MOTOR_TORQUE_CMD: the assist command is velocity-only, so the position
+    gain and the feed-forward torque are both zero and Kd alone closes the
+    loop on speed.
+
+    ``velocity_kd`` is also handed to the motor at construction, so the
+    package's own ``set_velocity`` path and the direct ``set_mit_mode`` calls
+    here cannot drift apart. It starts equal to ``AK80_6_MOTOR_SPEC``'s value,
+    which was chosen for the same reason; the copy lives here so both of this
+    repo's Kd knobs -- this one and TensionConfig.mit_velocity_kd -- are
+    visible in one place rather than one of them hiding in the package.
+    """
+
+    kp: float = 0.0
+    velocity_kd: float = 1.0
+    torque_ff_nm: float = 0.0
+
+
+class TensionState(IntEnum):
+    """States of the pre-tensioning chart, ported from ``motor_control.py``."""
+
+    RESET = 0
+    TENSIONING = 1
+    STOP = 2
+    DISABLE = 3
 
 
 @dataclass(frozen=True)
@@ -106,6 +167,11 @@ MODE_SWITCH_2 = 32
 # The value only has to outlast contact bounce (a few ms) while staying well
 # below the shortest deliberate actuation, so it is no longer critical.
 GPIO_SWITCH_BOUNCETIME = 50
+
+
+# CAN node IDs, matching motor_control.py's CAN_ID_LEFT / CAN_ID_RIGHT.
+MOTOR_CAN_ID_LEFT = 4
+MOTOR_CAN_ID_RIGHT = 3
 
 
 # switch signals - used as 'getattr' keys for GPIO
