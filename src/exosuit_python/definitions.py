@@ -119,6 +119,30 @@ class MotorCommandConfig:
     torque_ff_nm: float = 0.0
 
 
+@dataclass(frozen=True)
+class MotorSaturation:
+    """Command limits applied before a frame is packed.
+
+    Taken unchanged from ``motor_control.py``'s MOTOR_SAT_* values, which the
+    rig applies inside pack_mit_command(). They are deliberately tighter than
+    the protocol window: the rig's own MIT range is +/-45 rad/s while it
+    saturates at 41.87, which is 399.8 output RPM -- a 400 RPM mechanical
+    limit rather than a protocol one. On the AK80-6 that is half its rated
+    800 RPM, so the same number stays conservative on this motor.
+
+    This matters more than it used to. The assist command used to reach the
+    motor divided by 126, so a controller excursion arrived harmless; now it
+    arrives at full magnitude, and the only remaining limit would be the
+    motor profile's own +/-76 rad/s.
+    """
+
+    position_rad: tuple[float, float] = (-12.5, 12.5)
+    velocity_rad_per_sec: tuple[float, float] = (-41.87, 41.87)
+    kp: tuple[float, float] = (0.0, 500.0)
+    kd: tuple[float, float] = (0.0, 5.0)
+    torque_nm: tuple[float, float] = (-9.0, 9.0)
+
+
 class TensionState(IntEnum):
     """States of the pre-tensioning chart, ported from ``motor_control.py``."""
 
