@@ -153,6 +153,16 @@ class Exosuit:
         # produces its own timestamped CSV rather than one file per process.
         self.csv_writer = CSVWriter()
 
+        # Mock sensors carry their own names and share a bus, so the
+        # hardware config cannot match them; see IMUConfig.for_mock_devices.
+        # Chosen here rather than by the caller because with mock devices
+        # there is only one config that can work.
+        self._imu_cfg = (
+            IMUConfig.for_mock_devices()
+            if (self.config.mock_devices or self.config.test_gpio)
+            else self.config.imu_cfg
+        )
+
         self.motor_left: CubeMarsAK806v2CAN | MockMotor
         self.motor_right: CubeMarsAK806v2CAN | MockMotor
 
@@ -880,15 +890,15 @@ class Exosuit:
             manager = sensor_managers[idx]
             if (
                 not left_init
-                and manager.i2c_id == self.config.imu_cfg.left_leg_bus
-                and manager.imu_descriptor == self.config.imu_cfg.left_leg_descr
+                and manager.i2c_id == self._imu_cfg.left_leg_bus
+                and manager.imu_descriptor == self._imu_cfg.left_leg_descr
             ):
                 self.imu_left = manager
                 left_init = True
                 continue
             if (
-                manager.i2c_id == self.config.imu_cfg.right_leg_bus
-                and manager.imu_descriptor == self.config.imu_cfg.right_leg_descr
+                manager.i2c_id == self._imu_cfg.right_leg_bus
+                and manager.imu_descriptor == self._imu_cfg.right_leg_descr
             ):
                 self.imu_right = manager
                 right_init = True

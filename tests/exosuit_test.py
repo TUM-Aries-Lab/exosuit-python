@@ -3,6 +3,8 @@
 import math
 import time
 
+from imu_python.definitions import MOCK_NAME
+
 from exosuit_python.csv_writer import RecordDataColumnNames, SensorSignal
 from exosuit_python.definitions import (
     DEFAULT_EXOSUIT_FREQUENCY_HZ,
@@ -525,5 +527,36 @@ def test_the_damping_gain_is_bounded_too():
     command = motor.last_mit_command
     assert command is not None
     assert command["kd"] == MotorSaturation.kd[1]
+
+    exosuit._cleanup()
+
+
+def test_the_mock_and_hardware_imu_configs_describe_different_sensors():
+    """One config cannot serve both, and conflating them hid a real failure.
+
+    imu-python's mocks are both called MOCK and share a bus; the sensors on
+    the suit are LSM6DSOX_LIS3MDL and sit on buses 1 and 7. While the single
+    config held the mock's values every mock test passed and the real sensors
+    went unmatched on the bench -- and setting the real values then broke
+    every mock test in turn.
+    """
+    mock = IMUConfig.for_mock_devices()
+    hardware = IMUConfig()
+
+    assert mock.left_leg_descr.name == MOCK_NAME
+    assert mock.right_leg_descr.name == MOCK_NAME
+    assert mock.left_leg_bus == mock.right_leg_bus
+
+    assert hardware.left_leg_descr.name != MOCK_NAME
+    # The two sensors are on different buses, which is half of why the
+    # original config could never have matched them.
+    assert hardware.left_leg_bus != hardware.right_leg_bus
+
+
+def test_a_mock_exosuit_selects_the_mock_imu_config():
+    """The selection must not depend on the caller passing the right one."""
+    exosuit = _mock_exosuit(record=False)
+
+    assert exosuit._imu_cfg.left_leg_descr.name == MOCK_NAME
 
     exosuit._cleanup()

@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-from imu_python.definitions import I2CBusID, IMUDescriptor
+from imu_python.definitions import MOCK_NAME, I2CBusID, IMUDescriptor
 
 np.set_printoptions(precision=3, floatmode="fixed", suppress=True)
 
@@ -178,6 +178,26 @@ class IMUConfig:
     right_leg_descr: IMUDescriptor = field(
         default_factory=lambda: IMUDescriptor(name="LSM6DSOX_LIS3MDL", index=1)
     )
+
+    @classmethod
+    def for_mock_devices(cls) -> IMUConfig:
+        """Return the config imu-python's mock sensors satisfy.
+
+        The mocks are both called MOCK_NAME and share one bus, so the real
+        hardware's names and split buses can never match them. Before the real
+        values were filled in, this one config described the mocks -- which is
+        why the mock tests passed while the sensors on the bench went
+        unmatched. They describe different hardware and cannot be one value.
+
+        :return: An IMU config matching the mock factory's sensors.
+        :rtype: IMUConfig
+        """
+        return cls(
+            left_leg_bus=I2CBusID.bus_7,
+            left_leg_descr=IMUDescriptor(name=MOCK_NAME, index=0),
+            right_leg_bus=I2CBusID.bus_7,
+            right_leg_descr=IMUDescriptor(name=MOCK_NAME, index=1),
+        )
 
 
 # Switch pins, named in TEGRA_SOC mode with the BOARD number that was
