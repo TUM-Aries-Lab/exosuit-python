@@ -55,6 +55,15 @@ class RecordData:
     motor_command_left: float = math.nan
     motor_command_right: float = math.nan
 
+    # What the controller asked for, one stage earlier: a motor *position*
+    # reference in radians, which the position loop turns into the velocity
+    # command above. The rig records the same signal as "Motor Ref Left [rad]",
+    # and the pair is what makes a run readable -- a reference the measured
+    # position tracks is a working loop, a reference the position walks away
+    # from is not.
+    motor_reference_left: float = math.nan
+    motor_reference_right: float = math.nan
+
     # Operation switch, and the angle offset each limb was running with.
     # Recorded together so a session can be replayed exactly: the switch drives
     # baseline removal, and the offset says what it produced. The raw_signal_*
@@ -100,6 +109,9 @@ class RecordDataColumnNames(StrEnum):
 
     MOTOR_COMMAND_LEFT = "motor_command_left (rad/s)"
     MOTOR_COMMAND_RIGHT = "motor_command_right (rad/s)"
+
+    MOTOR_REFERENCE_LEFT = "motor_reference_left (rad)"
+    MOTOR_REFERENCE_RIGHT = "motor_reference_right (rad)"
 
     OPERATION_SWITCH = "operation_switch"
     BASELINE_OFFSET_RAD_LEFT = "baseline_offset_left (rad)"
@@ -227,6 +239,8 @@ class CSVWriter:
             RecordDataColumnNames.MOTOR_POSITION_RAD_RIGHT.value: data.motor_position_rad_right,
             RecordDataColumnNames.MOTOR_COMMAND_LEFT.value: data.motor_command_left,
             RecordDataColumnNames.MOTOR_COMMAND_RIGHT.value: data.motor_command_right,
+            RecordDataColumnNames.MOTOR_REFERENCE_LEFT.value: data.motor_reference_left,
+            RecordDataColumnNames.MOTOR_REFERENCE_RIGHT.value: data.motor_reference_right,
             RecordDataColumnNames.OPERATION_SWITCH.value: float(data.operation_switch),
             RecordDataColumnNames.BASELINE_OFFSET_RAD_LEFT.value: data.baseline_offset_rad_left,
             RecordDataColumnNames.BASELINE_OFFSET_RAD_RIGHT.value: data.baseline_offset_rad_right,
