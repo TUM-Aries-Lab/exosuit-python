@@ -160,15 +160,42 @@ def test_missing_feedback_holds_the_last_position():
 
 
 def test_a_late_tick_cannot_rail_the_loop():
-    """A stall hands the loop a huge step; the command must stay finite and bounded."""
+    """A stall hands the loop a huge step; the damping filter must not rail.
+
+    The loop does not clamp its own output -- the rig saturates downstream,
+    after the value has been fed back to the filter -- so what is asserted here
+    is that a 5 s step produces the proportional term and nothing exploding on
+    top of it.
+    """
     loop = MotorPositionLoop()
 
+    # The first enabled tick is hip-controller's own: with no previous
+    # timestamp to take a step from it returns zero, so the stall lands on the
+    # second.
+    loop.step(reference_rad=1.0, measured_rad=0.0, enabled=True, time_difference=DT)
     command = loop.step(
         reference_rad=1.0, measured_rad=0.0, enabled=True, time_difference=5.0
     )
 
-    low, high = CONFIG.output_limits_rad_per_sec
-    assert low <= command <= high
+    assert math.isfinite(command)
+    # kp * 1.0 rad of error, with the damping term a small correction on top.
+    assert abs(command - CONFIG.proportional_gain) < 1.0
+
+
+def test_the_loop_does_not_clamp_its_own_output():
+    """Saturation belongs downstream, as it does in the model and on the rig.
+
+    Clamping here would feed the damping filter a different signal from the
+    rig's on every tick that saturates, because both store the unclipped value.
+    """
+    loop = MotorPositionLoop()
+
+    loop.step(reference_rad=100.0, measured_rad=0.0, enabled=True, time_difference=DT)
+    command = loop.step(
+        reference_rad=100.0, measured_rad=0.0, enabled=True, time_difference=DT
+    )
+
+    assert command > 41.87, "the loop clamped instead of leaving it to the caller"
 
 
 def test_reset_clears_the_accumulated_unwrap():

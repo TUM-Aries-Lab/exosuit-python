@@ -174,11 +174,16 @@ class PositionLoopConfig:
     output_lpf_cutoff_rad_per_sec: float = 20.0
     output_lpf_damping_ratio: float = 1.0
 
-    # The model saturates the PID's output to +/-41.87 rad/s just before the
-    # CAN pack, which is the same window ``_command_velocity`` applies. Setting
-    # it here as well gives the PID's own integral clamp the right bound and
-    # keeps the command from being shaped by a clip the loop cannot see.
-    output_limits_rad_per_sec: tuple[float, float] = (-41.87, 41.87)
+    # Saturation is deliberately NOT applied inside the loop. In the model,
+    # Sum5's output goes to the outport *and* to the damping filter, and
+    # Saturation1 sits downstream in the motor block; motor_control.py does the
+    # same, storing the unclipped u in _last_u and saturating in
+    # pack_mit_command. hip-controller's PIDController clips before it stores,
+    # so handing it output_limits would feed the damping term a different
+    # signal from the rig's on exactly the ticks that saturate.
+    # ``_command_velocity`` applies MotorSaturation.velocity_rad_per_sec --
+    # the same +/-41.87 -- before the frame is packed, which is where the rig
+    # applies it too.
 
     # Ceiling on the time step handed to the loop, in seconds. The model runs
     # fixed-step and has no equivalent; this loop does not, and a stall would
