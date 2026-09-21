@@ -45,6 +45,7 @@ from exosuit_python.definitions import (
 )
 from exosuit_python.gpio import MockGPIO
 from exosuit_python.motor import MockMotor
+from exosuit_python.motor_watchdog import MotorDropoutWatchdog, WatchdogVerdict
 from exosuit_python.position_loop import MotorPositionLoop
 from exosuit_python.tensioning import LegTensioner
 
@@ -212,31 +213,7 @@ class Exosuit:
                 mit_velocity_kd=MotorCommandConfig.velocity_kd,
             )
 
-        # One tensioning chart per leg. The legs are mirrored, so they pull in
-        # opposite directions.
-        self._tensioner_left = LegTensioner(
-            TensionConfig.tensioning_velocity_left_rad_per_sec
-        )
-        self._tensioner_right = LegTensioner(
-            TensionConfig.tensioning_velocity_right_rad_per_sec
-        )
-        # One position loop per leg. The controller's output is a motor
-        # position reference in radians, and this is what turns it into the
-        # velocity the MIT frame carries; see PositionLoopConfig.
-        self._position_loop_left = MotorPositionLoop()
-        self._position_loop_right = MotorPositionLoop()
-
-        # Wall clock of the previous assist tick, so the loop is stepped with
-        # the time that actually passed. None between sessions.
-        self._last_control_tick: float | None = None
-
-        # Whether the last velocity command hit its limit, so saturation is
-        # reported on the edge rather than once per tick.
-        self._velocity_was_clamped = False
-
-        # Wall clock of the previous pre-tensioning tick, so the chart is
-        # stepped with the time that actually passed. None between sessions.
-        self._last_pretension_tick: float | None = None
+        self._build_control_state()
 
         # initialization calls
         if not self._initialize_imus():
@@ -516,6 +493,49 @@ class Exosuit:
             # and keeps this from becoming a busy spin.
             time.sleep(EXOSUIT_STANDBY_INTERVAL)
 
+    def _build_control_state(self) -> None:
+        """Create the per-leg control blocks and the loop's own bookkeeping.
+
+        Split out of ``__init__`` only for length: everything here is plain
+        construction with no ordering constraints against the rest of it.
+
+        :return: None
+        """
+        # One tensioning chart per leg. The legs are mirrored, so they pull in
+        # opposite directions.
+        self._tensioner_left = LegTensioner(
+            TensionConfig.tensioning_velocity_left_rad_per_sec
+        )
+        self._tensioner_right = LegTensioner(
+            TensionConfig.tensioning_velocity_right_rad_per_sec
+        )
+
+        # One position loop per leg. The controller's output is a motor
+        # position reference in radians, and this is what turns it into the
+        # velocity the MIT frame carries; see PositionLoopConfig.
+        self._position_loop_left = MotorPositionLoop()
+        self._position_loop_right = MotorPositionLoop()
+
+        # One dropout watchdog per leg. A motor that trips its own protection
+        # keeps answering commands without acting on them, and nothing else in
+        # this loop would notice; see MotorWatchdogConfig.
+        self._watchdog_left = MotorDropoutWatchdog()
+        self._watchdog_right = MotorDropoutWatchdog()
+        #: Which give-up already has a line in the log, keyed by leg.
+        self._reported_give_up: dict[str, int] = {}
+
+        # Wall clock of the previous assist tick, so the loop is stepped with
+        # the time that actually passed. None between sessions.
+        self._last_control_tick: float | None = None
+
+        # Whether the last velocity command hit its limit, so saturation is
+        # reported on the edge rather than once per tick.
+        self._velocity_was_clamped = False
+
+        # Wall clock of the previous pre-tensioning tick, so the chart is
+        # stepped with the time that actually passed. None between sessions.
+        self._last_pretension_tick: float | None = None
+
     def _set_baseline_removal_trigger(self, active: bool) -> None:
         """Drive baseline removal (hip angle offset) on both limbs.
 
@@ -590,6 +610,13 @@ class Exosuit:
             time_difference=time_difference,
         )
 
+        command_left = self._guard_motor(
+            self.motor_left, self._watchdog_left, "left", command_left, left_state
+        )
+        command_right = self._guard_motor(
+            self.motor_right, self._watchdog_right, "right", command_right, right_state
+        )
+
         self._command_velocity(self.motor_left, command_left)
         self._command_velocity(self.motor_right, command_right)
 
@@ -604,6 +631,52 @@ class Exosuit:
                 references=(reference_left, reference_right),
                 states=(left_state, right_state),
             )
+
+    def _guard_motor(self, motor, watchdog, leg: str, command: float, state) -> float:
+        """Return the command to actually send, after checking the motor is alive.
+
+        A motor that has dropped out of MIT mode answers every frame and acts
+        on none of them, so the loop sees a position that never changes, grows
+        its error without bound and rails the command. Commanding a dead shaft
+        is useless while it stays dead and dangerous the moment it wakes, since
+        the standing command is whatever the error had grown to.
+
+        :param motor: The motor for this leg.
+        :param watchdog: That leg's watchdog.
+        :param leg: Which leg, for the log.
+        :param command: What the position loop asked for, in rad/s.
+        :param state: This tick's telemetry for that motor.
+        :return: The command to send, zero while the motor is not answering.
+        :rtype: float
+        """
+        verdict = watchdog.step(
+            command_rad_per_sec=command,
+            speed_rad_per_sec=state.velocity_rad_per_sec,
+            torque_nm=state.torque_nm,
+        )
+        if verdict is WatchdogVerdict.HEALTHY:
+            return command
+
+        if verdict is WatchdogVerdict.RECOVER:
+            logger.warning(
+                f"The {leg} motor is taking commands without moving "
+                f"(attempt {watchdog.recovery_attempts}). Re-enabling MIT mode."
+            )
+            try:
+                motor.enable_mit_mode()
+            except Exception as err:
+                logger.error(f"Could not re-enable the {leg} motor: '{err}'.")
+            return 0.0
+
+        # GIVE_UP is latched, so this would otherwise log every tick.
+        if watchdog.recovery_attempts == self._reported_give_up.get(leg, -1):
+            return 0.0
+        self._reported_give_up[leg] = watchdog.recovery_attempts
+        logger.error(
+            f"The {leg} motor stopped responding and did not come back. "
+            f"It is no longer being commanded; the other leg continues."
+        )
+        return 0.0
 
     def _command_velocity(
         self, motor, velocity_rad_per_sec: float, velocity_kd: float | None = None
@@ -1153,6 +1226,11 @@ class Exosuit:
         """
         self._position_loop_left.reset()
         self._position_loop_right.reset()
+        # Including the give-up latch: a leg written off in one session gets a
+        # fresh chance in the next rather than staying dead until a restart.
+        self._watchdog_left.reset()
+        self._watchdog_right.reset()
+        self._reported_give_up.clear()
         # The next session measures its first step from its own start, not
         # from whenever this one happened to end.
         self._last_control_tick = None
