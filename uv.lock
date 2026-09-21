@@ -587,7 +587,7 @@ requires-dist = [
     { name = "hip-controller", specifier = ">=0.2.0" },
     { name = "imu-python", specifier = ">=0.1.2" },
     { name = "loguru", specifier = ">=0.7.3" },
-    { name = "motor-python", specifier = ">=0.0.8" },
+    { name = "motor-python", specifier = ">=0.0.10" },
     { name = "numpy", specifier = ">=2.2.3" },
 ]
 
@@ -944,7 +944,7 @@ wheels = [
 
 [[package]]
 name = "motor-python"
-version = "0.0.8"
+version = "0.0.10"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "loguru" },
@@ -952,9 +952,9 @@ dependencies = [
     { name = "pyserial" },
     { name = "python-can" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/58/4d/df5e48b4d7e416e1e99b650fecda970de9296604c2010a058b26aa73a342/motor_python-0.0.8.tar.gz", hash = "sha256:48bff4a5ba29d570a7cbe5184138dfe9ba3e163484e1024eda8690c9bff95232", size = 59740, upload-time = "2026-09-17T14:46:51.661Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/3a/24/7e445aa45f1264cb587a1a348b1814d955eca2fe3d16af4e06f931e27125/motor_python-0.0.10.tar.gz", hash = "sha256:510f7b0e75644bb52d585b353997060fd55543893392e26b41cb57064035dd14", size = 60841, upload-time = "2026-09-21T10:29:42.005Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/f9/86/d1a6020b6fc851374e87b73a1448972201cbe649daefc39a1fb4e0f4cb87/motor_python-0.0.8-py3-none-any.whl", hash = "sha256:32eb20530684ed9615c35e10f073f1fad3ca97729bd8a33a640bda3bb415ea5d", size = 62551, upload-time = "2026-09-17T14:46:50.472Z" },
+    { url = "https://files.pythonhosted.org/packages/69/67/fb315ed483f06db21111827d21de4e97740613f37f0824c8d0ad976ce896/motor_python-0.0.10-py3-none-any.whl", hash = "sha256:c4001d60fed911695797afe9c7069919eb34ebce0edc224c2006d85cafca0ae7", size = 63708, upload-time = "2026-09-21T10:29:40.606Z" },
 ]
 
 [[package]]
