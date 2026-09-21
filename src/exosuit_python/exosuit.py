@@ -45,6 +45,7 @@ from exosuit_python.definitions import (
 )
 from exosuit_python.gpio import MockGPIO
 from exosuit_python.motor import MockMotor
+from exosuit_python.position_loop import MotorPositionLoop
 from exosuit_python.tensioning import LegTensioner
 
 
@@ -219,6 +220,16 @@ class Exosuit:
         self._tensioner_right = LegTensioner(
             TensionConfig.tensioning_velocity_right_rad_per_sec
         )
+        # One position loop per leg. The controller's output is a motor
+        # position reference in radians, and this is what turns it into the
+        # velocity the MIT frame carries; see PositionLoopConfig.
+        self._position_loop_left = MotorPositionLoop()
+        self._position_loop_right = MotorPositionLoop()
+
+        # Wall clock of the previous assist tick, so the loop is stepped with
+        # the time that actually passed. None between sessions.
+        self._last_control_tick: float | None = None
+
         # Whether the last velocity command hit its limit, so saturation is
         # reported on the edge rather than once per tick.
         self._velocity_was_clamped = False
@@ -473,6 +484,7 @@ class Exosuit:
             if was_running:
                 was_running = False
                 self._release_motors()
+                self._reset_position_loops()
 
             # Pretensioning ticks at the control rate, like every other lap, so
             # the recording keeps one row spacing for the whole run. The chart
@@ -549,8 +561,34 @@ class Exosuit:
         signal_left, signal_right = self._build_signals(
             data_left=data_left, data_right=data_right
         )
-        command_right = self.controller_right.step(curr_signal=signal_right)
-        command_left = self.controller_left.step(curr_signal=signal_left)
+        # What the controller returns is a motor position reference in
+        # radians, not a velocity. The rig logs it as "Motor Ref Left [rad]"
+        # and closes a loop on the motor's own position to get the velocity
+        # the MIT frame carries; commanding it directly as a velocity
+        # integrates it into an ever-tightening tendon. See PositionLoopConfig.
+        reference_right = self.controller_right.step(curr_signal=signal_right)
+        reference_left = self.controller_left.step(curr_signal=signal_left)
+
+        time_difference = self._elapsed_since_last_control_tick()
+        left_state = self._read_motor_state(self.motor_left)
+        right_state = self._read_motor_state(self.motor_right)
+
+        # The loop is stepped whether or not the assist is enabled. Disabled it
+        # commands zero, but it keeps following the shaft, so a rollover that
+        # happens while the assist is off is not lost; the switch's rising edge
+        # is what clears its control state, as the model's enable port does.
+        command_left = self._position_loop_left.step(
+            reference_rad=reference_left,
+            measured_rad=left_state.position_rad,
+            enabled=self._operation_switch,
+            time_difference=time_difference,
+        )
+        command_right = self._position_loop_right.step(
+            reference_rad=reference_right,
+            measured_rad=right_state.position_rad,
+            enabled=self._operation_switch,
+            time_difference=time_difference,
+        )
 
         self._command_velocity(self.motor_left, command_left)
         self._command_velocity(self.motor_right, command_right)
@@ -563,6 +601,8 @@ class Exosuit:
                     self.controller_right.last_filtered_signal or signal_right,
                 ),
                 commands=(command_left, command_right),
+                references=(reference_left, reference_right),
+                states=(left_state, right_state),
             )
 
     def _command_velocity(
@@ -714,39 +754,48 @@ class Exosuit:
         raw: tuple[SensorSignal, SensorSignal],
         filtered: tuple[SensorSignal, SensorSignal],
         commands: tuple[float, float],
+        references: tuple[float, float] = (math.nan, math.nan),
+        states: tuple[MotorTelemetry, MotorTelemetry] | None = None,
     ) -> None:
         """Buffer one row of this process's recording.
 
         Rows are held in memory and written once, at shutdown, so the control
         loop never touches the disk and one run produces one file.
 
-        Motor torque, speed and position are written as NaN -- not measured, as
-        opposed to a zero, which would read as "the motor produced no torque".
+        What the motor reports -- torque, speed, position and its fault code --
+        is read from the transport's feedback cache; see ``_read_motor_state``.
+        The control path passes the readings it already took rather than let
+        this method take them again, so the row describes the same tick the
+        command was computed from instead of one a few hundred microseconds
+        later.
 
-        Position and speed *are* obtainable: ``CubeMarsAK606v3.get_status()``
-        returns raw bytes that ``motor_python.MotorStatusParser`` decodes into
-        ``position_degrees`` and ``speed_erpm``. They are not wired up here
-        because ``get_status()`` is a blocking serial round-trip, and two of
-        them per iteration inside the loop that drives the motors is a
-        real-time risk worth measuring before taking it. ``MockMotor`` would
-        also need the same call, which it does not have today.
-
-        Torque is not measured by the motor at all: it reports current, so the
-        Nm/kg column needs iq_current x Kt and the subject's mass -- two
-        constants that belong in a config, not in a guess here.
+        Torque is the MIT feedback field decoded against the motor profile's
+        torque range, so it is in N*m despite motor-python calling it
+        ``current_amps``. A Nm/kg column would still need the subject's mass,
+        which belongs in a config rather than a guess here.
 
         :param raw: ``(left, right)`` raw signals, before preprocessing.
         :param filtered: ``(left, right)`` preprocessed signals, or NaN values
             on rows where the controller did not run.
-        :param commands: ``(left, right)`` commanded motor values, NaN when idle.
+        :param commands: ``(left, right)`` commanded motor velocities in rad/s,
+            NaN when idle.
+        :param references: ``(left, right)`` motor position references in
+            radians, NaN on rows where the controller did not run.
+        :param states: ``(left, right)`` motor telemetry for this tick. Read
+            here when not supplied, which is what the sensor-only path does.
         :return: None
         """
         not_measured = math.nan
         raw_left, raw_right = raw
         filtered_left, filtered_right = filtered
         command_left, command_right = commands
-        left_state = self._read_motor_state(self.motor_left)
-        right_state = self._read_motor_state(self.motor_right)
+        reference_left, reference_right = references
+        if states is None:
+            states = (
+                self._read_motor_state(self.motor_left),
+                self._read_motor_state(self.motor_right),
+            )
+        left_state, right_state = states
 
         self.csv_writer.append_data(
             RecordData(
@@ -763,6 +812,8 @@ class Exosuit:
                 motor_position_rad_right=right_state.position_rad,
                 motor_command_left=command_left,
                 motor_command_right=command_right,
+                motor_reference_left=reference_left,
+                motor_reference_right=reference_right,
                 operation_switch=self._operation_switch,
                 tension_switch=self._tension_switch,
                 motor_error_left=left_state.error_code,
@@ -887,7 +938,41 @@ class Exosuit:
                 # settling -- six ticks at 100 Hz. Calling it every lap while
                 # the other leg is still pulling would stall the loop and feed
                 # a wrong dt to the still-running leg's filter and hold timer.
+                if tensioner.finished:
+                    self._zero_encoder(motor)
                 motor.stop()
+
+    def _zero_encoder(self, motor) -> None:
+        """Make the tensioned position the motor's new zero.
+
+        Sent on STOP -> DISABLE, where the rig sends it: the motor has held the
+        tensioned position for the STOP hold and is still in motor mode, with
+        the disable frame about to follow.
+
+        The position loop reads the motor's own position, and the controller's
+        reference is written about a zero that means "leg upright, tendon
+        taut". Without this the reference is measured against wherever the
+        spool happened to finish -- 8.19 rad into the left and 13.47 into the
+        right on the 2026-09-21 run, the latter past the +/-12.5 rad the MIT
+        position field encodes, so it had already wrapped before the assist
+        began. Zeroing here gives the assist the full field either side of the
+        tensioned point, which the rig notes is enough for any locomotion mode
+        including stairs.
+
+        A motor that cannot be zeroed is logged and left alone rather than
+        stopping the session: pre-tensioning itself has succeeded by this
+        point, and the unwrapping in the position loop still tracks the shaft.
+
+        :param motor: The motor whose encoder to re-zero.
+        :return: None
+        """
+        zero_position = getattr(motor, "zero_position", None)
+        if zero_position is None:
+            return
+        try:
+            zero_position()
+        except Exception as err:
+            logger.error(f"Could not zero a motor's encoder: '{err}'.")
 
     def _sleep_until_due(self, previous_due: float) -> float:
         """Sleep until the next tick falls due, and say when that was.
@@ -919,6 +1004,26 @@ class Exosuit:
             time.sleep(remaining)
             return next_due
         return time.monotonic()
+
+    def _elapsed_since_last_control_tick(self) -> float:
+        """Return the time since the previous assist tick, in seconds.
+
+        The position loop's filter is rate dependent in the same way the
+        tensioning chart's is, and this loop does not keep its nominal period:
+        a bench run measured a median of 10.11 ms against a 10 ms target, a
+        95th percentile of 15.18 ms and a worst case of 217.6 ms. The loop
+        clamps the step it actually uses; this reports the real elapsed time
+        and lets it decide.
+
+        :return: Seconds since the previous tick, or the nominal period on the
+            first tick of a session.
+        :rtype: float
+        """
+        now = time.monotonic()
+        previous, self._last_control_tick = self._last_control_tick, now
+        if previous is None:
+            return 1 / self.config.frequency
+        return now - previous
 
     def _elapsed_since_last_tick(self) -> float:
         """Return the time since the previous pre-tensioning tick, in seconds.
@@ -1036,6 +1141,21 @@ class Exosuit:
         self._release_motors()
         self._reset_tensioners()
         self._status = ExosuitStates.STANDBY
+
+    def _reset_position_loops(self) -> None:
+        """Clear both position loops, ready for the next assist session.
+
+        Called when the assist stops, so the next one starts from where the
+        tendon actually is rather than carrying this session's integrator,
+        filter and accumulated unwrap into it.
+
+        :return: None
+        """
+        self._position_loop_left.reset()
+        self._position_loop_right.reset()
+        # The next session measures its first step from its own start, not
+        # from whenever this one happened to end.
+        self._last_control_tick = None
 
     def _reset_tensioners(self) -> None:
         """Return both tensioning charts to RESET for the next session.

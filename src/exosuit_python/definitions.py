@@ -121,6 +121,87 @@ class TensionConfig:
 
 
 @dataclass(frozen=True)
+class PositionLoopConfig:
+    """The outer position loop -- gains for hip-controller's ``PIDController``.
+
+    Read off ``matlab/Control_ML_Stairs_IMUbased_developer.slx`` in the
+    LocomotionMode repository, blocks PID1 (SID 7524) and PID2 (SID 7551),
+    which are identical. The block feeding their ``Ref`` inport is named
+    **MOTOR POSITION REFERENCE GENERATOR** and its outport ``Ref motion``: what
+    ``WalkOnController.step`` returns is a motor *position* reference in
+    radians, not a velocity. Their ``Actual Motion`` inport is the motor's own
+    measured position, by way of the model's unwrapping block.
+
+        u = kp * (reference - measured) + ki * integral - damping_gain * LPF(u_previous)'
+
+    The derivative term is not the derivative of the error: ``Gain7`` is fed
+    from the second outport of a second-order low-pass filter whose input is
+    the PID's previous output, and is subtracted. That is velocity-feedback
+    damping, and it is the reason a plain P controller in its place would
+    behave differently.
+
+    hip-controller ships this block as ``PIDController`` and, until it was
+    wired up, nothing imported it. The reference went straight to the motor as
+    a velocity, which integrates it. Because the reference spends most of a
+    stride positive -- the tendon is pulled in during flexion and returns
+    towards zero, so it never needs to go far negative -- that became a
+    standing order to keep winding: a 2026-09-21 bench run wound 6.94 rad into
+    the left spool and 5.39 into the right over 15.5 s and gave none of it
+    back, which the wearer felt as a slow creep that held tension hard and
+    answered the leg barely at all. Closed as a position loop on the rig, the
+    same signal tracks: measured against reference, correlation 0.87 with 0.004
+    rad of net drift across 23k samples.
+    """
+
+    # Gain4. The model says 8.0, and so does hip-controller's PIDConfig
+    # default. The Python rig that ran the experiments deliberately doubled it
+    # to 16.0 -- one of only two changes made in that port -- and every worn
+    # recording comes from 16.0, so that is what is set here. Halve it to
+    # return to the model exactly.
+    proportional_gain: float = 16.0
+
+    # Gain8. Zero in the model, which disables the integral term outright. It
+    # is carried rather than dropped because the state it integrates is what a
+    # future tuning session would switch on.
+    integral_gain: float = 0.0
+
+    # Gain7, written in the model as the expression 0.06-0.04, acting on the
+    # filtered derivative of the loop's own previous output.
+    damping_gain: float = 0.02
+
+    # The mask on the PID's internal second-order low-pass filter: wn = 20
+    # rad/s, zt = 1, x0 = 0.
+    output_lpf_cutoff_rad_per_sec: float = 20.0
+    output_lpf_damping_ratio: float = 1.0
+
+    # The model saturates the PID's output to +/-41.87 rad/s just before the
+    # CAN pack, which is the same window ``_command_velocity`` applies. Setting
+    # it here as well gives the PID's own integral clamp the right bound and
+    # keeps the command from being shaped by a clip the loop cannot see.
+    output_limits_rad_per_sec: tuple[float, float] = (-41.87, 41.87)
+
+    # Ceiling on the time step handed to the loop, in seconds. The model runs
+    # fixed-step and has no equivalent; this loop does not, and a stall would
+    # push a step of hundreds of milliseconds into a 20 rad/s filter and rail
+    # it -- the same failure the SOGI dt clamp exists for upstream. Three
+    # nominal periods at 100 Hz, matching TensionConfig's own ceiling.
+    max_time_step: float = 0.03
+
+    # The model's CHINESE CORRECTION block, which unwraps the motor position
+    # between the CAN unpack and the PID's feedback inport: a step of more than
+    # this between ticks is a rollover of the +/-12.5 rad position field, not
+    # motion, and is accumulated out. The threshold is the model's Switch1.
+    #
+    # The rig gets away with a coarse threshold because it re-zeroes the
+    # encoder when pre-tensioning ends and its references stay inside +/-10.47
+    # rad, the reference generator's own saturation. This suit pulls further --
+    # the 2026-09-21 run wound 13.47 rad into the right spool during
+    # pre-tensioning alone, past the field's range before the assist even
+    # began -- which is why the zeroing matters as much as the unwrapping.
+    wrap_detection_threshold_rad: float = 20.0
+
+
+@dataclass(frozen=True)
 class MotorCommandConfig:
     """MIT command gains for the running (assist) path.
 
