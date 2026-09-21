@@ -153,11 +153,28 @@ class PositionLoopConfig:
     rad of net drift across 23k samples.
     """
 
-    # Gain4 -- motor_control.py:68 KP_MAIN, the authoritative value: the rig
-    # runs 16.0 and nothing overrides it at runtime (receiver.py only reads
-    # mc.KP_MAIN). The Simulink model still says 8.0, as does hip-controller's
-    # PIDConfig default, so neither of those is the number to copy.
-    proportional_gain: float = 16.0
+    # Gain4 -- KP_MAIN. The rig runs 16.0 and that is what this started at,
+    # but the rig is an AK60-6: motor_control.py decodes P +/-12.5, V +/-45,
+    # T +/-15, an exact match for AK60_6_V1_1_MIT_LIMITS, and its header cites
+    # the AK60-6 manual. This suit is an AK80-6 -- 6.0 Nm rated against 3.0,
+    # 12.0 peak against 9.0, 21 pole pairs against 14, and a much heavier
+    # rotor.
+    #
+    # The gain does not survive that swap. It sets the velocity trajectory the
+    # motor is asked to follow, and the torque to follow it is J * alpha, so a
+    # bigger rotor draws proportionally more for the same command. Measured on
+    # 2026-09-21 against the rig's no-classif ID_07 run, torque while the motor
+    # was moving: 3.48 / 3.78 N*m here against 1.78 / 1.38 on the rig -- a
+    # factor of 2 to 2.7 -- while torque at rest matched (0.58 / 0.86 against
+    # 0.50 / 0.41), which is what isolates it to acceleration rather than
+    # tension. The motor also reversed direction 33.9 / 20.7 times a second
+    # against the rig's 15.4 / 14.3: it lags, overshoots, and comes back.
+    #
+    # 16 * (1.6 / 3.6) is about 7, so matching the rig's moving torque lands on
+    # the Simulink model's original 8.0 -- which is also hip-controller's
+    # PIDConfig default. Raise it back towards 16 if the assist feels weak or
+    # tracking is loose; the two numbers bracket the useful range.
+    proportional_gain: float = 8.0
 
     # Gain8 -- KI_MAIN. Zero, which disables the integral term outright. It is
     # carried rather than dropped because the state it integrates is what a
