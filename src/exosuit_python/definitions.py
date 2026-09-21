@@ -246,6 +246,53 @@ class MotorCommandConfig:
 
 
 @dataclass(frozen=True)
+class MotorWatchdogConfig:
+    """Thresholds for spotting a motor that has dropped out of MIT mode.
+
+    A CubeMars motor that trips its own protection keeps answering commands
+    while no longer acting on them: telemetry arrives at the usual rate and the
+    fault code stays zero. On 2026-09-21 the right motor stopped at t=8.84 s,
+    having just drawn 11.05 N*m against the AK80-6's 12.0 N*m peak, and the
+    loop went on commanding it up to 44 rad/s for another 16 seconds.
+
+    Every threshold here is taken from that recording, where the healthy and
+    dead states are far apart:
+
+    ============================  ==============  ================
+    while driving healthily       while dead
+    ============================  ==============  ================
+    mean speed above 5 rad/s cmd  13.8-17.6       0.067 rad/s
+    mean torque                   1.97-2.37       0.186 N*m
+    longest suspect stretch       6 ticks         16 seconds
+    ============================  ==============  ================
+    """
+
+    # A command the motor should visibly answer. Below this, a motor correctly
+    # holding still is indistinguishable from one that has stopped listening.
+    min_command_rad_per_sec: float = 5.0
+
+    # "Not moving". The dead motor peaked at 0.352 rad/s of noise; a driven one
+    # averaged 13.8.
+    max_speed_rad_per_sec: float = 1.0
+
+    # Mean torque over the suspect stretch, and the part that matters most: a
+    # motor held by a jammed tendon reports high torque and must NOT be
+    # re-enabled, because the fault is mechanical and wants a human. The dead
+    # motor averaged 0.186 N*m; a driven one 1.97.
+    max_mean_torque_nm: float = 1.0
+
+    # Consecutive suspect ticks before acting -- about half a second at 90 Hz.
+    # The longest healthy run of the same condition was 6 ticks, so the margin
+    # against a false trip is nearly sevenfold.
+    ticks_before_fault: int = 40
+
+    # How many times to re-enable before writing the leg off for the session.
+    # A motor that drops out repeatedly is overheating or failing, and
+    # re-enabling it into the same load is how a warm motor becomes a dead one.
+    max_recovery_attempts: int = 3
+
+
+@dataclass(frozen=True)
 class MotorSaturation:
     """Command limits applied before a frame is packed.
 
