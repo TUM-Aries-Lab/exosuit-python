@@ -31,6 +31,21 @@ Three properties of that diagram are easy to lose and all three matter:
 The control law itself is hip-controller's :class:`PIDController`, which
 implements exactly this block and which, until it was wired up here, nothing in
 the package imported.
+
+Three things differ from ``motor_control.py``, all deliberate:
+
+* the rig calls its PID with no ``dt``, so it runs on a fixed 0.01 s as the
+  model's ode1 solver does. This loop does not hold its nominal period -- a
+  bench run measured a 95th percentile of 15.18 ms against a 10 ms target -- so
+  it is stepped with the measured time, clamped, as the tensioning chart in
+  this package already is;
+* the rig resets its PIDs only in a whole-exosuit ``reset()``, so a session
+  that toggles the switch carries the previous one's damping state across.
+  The model's enable port says ``StatesWhenEnabling: reset``, and this follows
+  the model;
+* hip-controller's ``compute_output`` returns zero on its first call, having no
+  previous timestamp to take a step from, where the rig produces a command
+  immediately. That costs one tick of assist at the start of a session.
 """
 
 import math
@@ -84,7 +99,10 @@ class MotorPositionLoop:
                 proportional_gain=self._config.proportional_gain,
                 integral_gain=self._config.integral_gain,
                 derivative_gain=self._config.damping_gain,
-                output_limits=self._config.output_limits_rad_per_sec,
+                # Left unset on purpose: the rig saturates downstream, after
+                # the value has been fed back to the damping filter. See
+                # PositionLoopConfig.
+                output_limits=None,
             ),
             filter_config=LowPassFilterConfig(
                 cut_off_frequency_rad_per_sec=self._config.output_lpf_cutoff_rad_per_sec,
