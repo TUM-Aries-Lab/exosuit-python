@@ -153,24 +153,24 @@ class PositionLoopConfig:
     rad of net drift across 23k samples.
     """
 
-    # Gain4. The model says 8.0, and so does hip-controller's PIDConfig
-    # default. The Python rig that ran the experiments deliberately doubled it
-    # to 16.0 -- one of only two changes made in that port -- and every worn
-    # recording comes from 16.0, so that is what is set here. Halve it to
-    # return to the model exactly.
+    # Gain4 -- motor_control.py:68 KP_MAIN, the authoritative value: the rig
+    # runs 16.0 and nothing overrides it at runtime (receiver.py only reads
+    # mc.KP_MAIN). The Simulink model still says 8.0, as does hip-controller's
+    # PIDConfig default, so neither of those is the number to copy.
     proportional_gain: float = 16.0
 
-    # Gain8. Zero in the model, which disables the integral term outright. It
-    # is carried rather than dropped because the state it integrates is what a
+    # Gain8 -- KI_MAIN. Zero, which disables the integral term outright. It is
+    # carried rather than dropped because the state it integrates is what a
     # future tuning session would switch on.
     integral_gain: float = 0.0
 
-    # Gain7, written in the model as the expression 0.06-0.04, acting on the
-    # filtered derivative of the loop's own previous output.
+    # Gain7 -- KD_INNER_MAIN, written in the model as the expression
+    # 0.06-0.04, acting on the filtered derivative of the loop's own previous
+    # output rather than on the derivative of the error.
     damping_gain: float = 0.02
 
-    # The mask on the PID's internal second-order low-pass filter: wn = 20
-    # rad/s, zt = 1, x0 = 0.
+    # PID_LPF_WN / PID_LPF_ZT, and the mask on the model's own filter block:
+    # wn = 20 rad/s, zt = 1, x0 = 0.
     output_lpf_cutoff_rad_per_sec: float = 20.0
     output_lpf_damping_ratio: float = 1.0
 
