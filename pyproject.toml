@@ -11,7 +11,7 @@ homepage = "https://github.com/TUM-Aries-Lab/exosuit-python"
 dependencies = [
   "numpy>=2.2.3",
   "loguru>=0.7.3",
-  "motor-python>=0.0.8",
+  "motor-python>=0.0.10",
   "imu-python>=0.1.2",
   "hip-controller>=0.2.0",
 ]
