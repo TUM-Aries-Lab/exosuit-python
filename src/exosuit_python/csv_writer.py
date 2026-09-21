@@ -38,11 +38,11 @@ class RecordData:
     raw_signal_right: SensorSignal
     filtered_signal_right: SensorSignal
 
-    motor_torque_nm_per_kg_left: float
+    motor_torque_nm_left: float
     motor_speed_rad_per_sec_left: float
     motor_position_rad_left: float
 
-    motor_torque_nm_per_kg_right: float
+    motor_torque_nm_right: float
     motor_speed_rad_per_sec_right: float
     motor_position_rad_right: float
 
@@ -70,6 +70,10 @@ class RecordData:
     # the derived state also avoids recording a status that lags them.
     tension_switch: bool = False
 
+    # 0 when the motor reports no fault. NaN when nothing read it.
+    motor_error_left: float = math.nan
+    motor_error_right: float = math.nan
+
 
 class RecordDataColumnNames(StrEnum):
     """Container for the measurements from the sensor of both lower limbs."""
@@ -86,11 +90,11 @@ class RecordDataColumnNames(StrEnum):
     FILTERED_ANGLE_RIGHT = "filtered_angle_right (rad)"
     FILTERED_VELOCITY_RIGHT = "filtered_velocity_right (rad/s)"
 
-    MOTOR_TORQUE_NM_PER_KG_LEFT = "motor_torque_left (Nm/kg)"
+    MOTOR_TORQUE_NM_LEFT = "motor_torque_left (Nm)"
     MOTOR_SPEED_RAD_PER_SEC_LEFT = "motor_speed_left (rad/s)"
     MOTOR_POSITION_RAD_LEFT = "motor_position_left (rad)"
 
-    MOTOR_TORQUE_NM_PER_KG_RIGHT = "motor_torque_right (Nm/kg)"
+    MOTOR_TORQUE_NM_RIGHT = "motor_torque_right (Nm)"
     MOTOR_SPEED_RAD_PER_SEC_RIGHT = "motor_speed_right (rad/s)"
     MOTOR_POSITION_RAD_RIGHT = "motor_position_right (rad)"
 
@@ -101,6 +105,11 @@ class RecordDataColumnNames(StrEnum):
     BASELINE_OFFSET_RAD_LEFT = "baseline_offset_left (rad)"
     BASELINE_OFFSET_RAD_RIGHT = "baseline_offset_right (rad)"
     TENSION_SWITCH = "tension_switch"
+
+    # The motor's own fault code, 0 when healthy. One column, and it
+    # distinguishes a motor that refused a command from one that never got it.
+    MOTOR_ERROR_LEFT = "motor_error_left"
+    MOTOR_ERROR_RIGHT = "motor_error_right"
 
 
 class CSVWriter:
@@ -210,8 +219,8 @@ class CSVWriter:
             RecordDataColumnNames.RAW_VELOCITY_RIGHT.value: data.raw_signal_right.velocity_rad_per_sec,
             RecordDataColumnNames.FILTERED_ANGLE_RIGHT.value: data.filtered_signal_right.angle_rad,
             RecordDataColumnNames.FILTERED_VELOCITY_RIGHT.value: data.filtered_signal_right.velocity_rad_per_sec,
-            RecordDataColumnNames.MOTOR_TORQUE_NM_PER_KG_LEFT.value: data.motor_torque_nm_per_kg_left,
-            RecordDataColumnNames.MOTOR_TORQUE_NM_PER_KG_RIGHT.value: data.motor_torque_nm_per_kg_right,
+            RecordDataColumnNames.MOTOR_TORQUE_NM_LEFT.value: data.motor_torque_nm_left,
+            RecordDataColumnNames.MOTOR_TORQUE_NM_RIGHT.value: data.motor_torque_nm_right,
             RecordDataColumnNames.MOTOR_SPEED_RAD_PER_SEC_LEFT.value: data.motor_speed_rad_per_sec_left,
             RecordDataColumnNames.MOTOR_SPEED_RAD_PER_SEC_RIGHT.value: data.motor_speed_rad_per_sec_right,
             RecordDataColumnNames.MOTOR_POSITION_RAD_LEFT.value: data.motor_position_rad_left,
@@ -222,6 +231,8 @@ class CSVWriter:
             RecordDataColumnNames.BASELINE_OFFSET_RAD_LEFT.value: data.baseline_offset_rad_left,
             RecordDataColumnNames.BASELINE_OFFSET_RAD_RIGHT.value: data.baseline_offset_rad_right,
             RecordDataColumnNames.TENSION_SWITCH.value: float(data.tension_switch),
+            RecordDataColumnNames.MOTOR_ERROR_LEFT.value: data.motor_error_left,
+            RecordDataColumnNames.MOTOR_ERROR_RIGHT.value: data.motor_error_right,
         }
 
     def save_data(self, output_dir: Path = RECORDINGS_DIR) -> Path:

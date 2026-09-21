@@ -4,6 +4,7 @@ import math
 import time
 from types import SimpleNamespace
 
+import pytest
 from imu_python.definitions import MOCK_NAME
 
 from exosuit_python.csv_writer import RecordDataColumnNames, SensorSignal
@@ -686,5 +687,42 @@ def test_a_late_tick_restarts_the_schedule_instead_of_catching_up():
     assert time.monotonic() - started < period  # did not sleep
     assert next_due >= started  # rebased on now, not on the missed schedule
     assert next_due < started + period
+
+    exosuit._cleanup()
+
+
+def test_motor_telemetry_reaches_the_recording():
+    """Every motor column held NaN, so a run could not say what the motor did.
+
+    A session showing a healthy command stream said nothing about whether the
+    motor accepted it, produced torque, or reported a fault -- which is
+    exactly the question left open when the assist commanded 9.15 rad of
+    travel and nothing moved.
+    """
+    exosuit = _mock_exosuit(record=False)
+    motor = _mock_motor(exosuit)
+    motor._last_feedback = SimpleNamespace(
+        position_degrees=90.0, speed_erpm=0.0, current_amps=1.25, error_code=0
+    )
+    motor._last_feedback_monotonic = time.monotonic()
+
+    state = exosuit._read_motor_state(motor)
+
+    assert state.position_rad == pytest.approx(math.pi / 2)
+    assert state.torque_nm == 1.25
+    assert state.error_code == 0
+
+    exosuit._cleanup()
+
+
+def test_a_motor_that_has_never_reported_records_as_unknown():
+    """Absent feedback must read as NaN, not as a plausible zero."""
+    exosuit = _mock_exosuit(record=False)
+
+    state = exosuit._read_motor_state(_mock_motor(exosuit))
+
+    assert math.isnan(state.position_rad)
+    assert math.isnan(state.torque_nm)
+    assert math.isnan(state.error_code)
 
     exosuit._cleanup()

@@ -59,6 +59,22 @@ def _saturate(value: float, low: float, high: float) -> float:
     return max(low, min(high, value))
 
 
+@dataclass(frozen=True)
+class MotorTelemetry:
+    """What a motor reports, converted into this package's units.
+
+    :position_rad: Shaft position in radians.
+    :velocity_rad_per_sec: Shaft velocity in radians per second.
+    :torque_nm: Torque in N*m.
+    :error_code: The motor's fault code, 0 when healthy.
+    """
+
+    position_rad: float
+    velocity_rad_per_sec: float
+    torque_nm: float
+    error_code: float
+
+
 @dataclass
 class ExosuitConfig:
     """Exosuit configuration.
@@ -729,6 +745,8 @@ class Exosuit:
         raw_left, raw_right = raw
         filtered_left, filtered_right = filtered
         command_left, command_right = commands
+        left_state = self._read_motor_state(self.motor_left)
+        right_state = self._read_motor_state(self.motor_right)
 
         self.csv_writer.append_data(
             RecordData(
@@ -737,16 +755,18 @@ class Exosuit:
                 filtered_signal_left=filtered_left,
                 raw_signal_right=raw_right,
                 filtered_signal_right=filtered_right,
-                motor_torque_nm_per_kg_left=not_measured,
-                motor_speed_rad_per_sec_left=not_measured,
-                motor_position_rad_left=not_measured,
-                motor_torque_nm_per_kg_right=not_measured,
-                motor_speed_rad_per_sec_right=not_measured,
-                motor_position_rad_right=not_measured,
+                motor_torque_nm_left=left_state.torque_nm,
+                motor_speed_rad_per_sec_left=left_state.velocity_rad_per_sec,
+                motor_position_rad_left=left_state.position_rad,
+                motor_torque_nm_right=right_state.torque_nm,
+                motor_speed_rad_per_sec_right=right_state.velocity_rad_per_sec,
+                motor_position_rad_right=right_state.position_rad,
                 motor_command_left=command_left,
                 motor_command_right=command_right,
                 operation_switch=self._operation_switch,
                 tension_switch=self._tension_switch,
+                motor_error_left=left_state.error_code,
+                motor_error_right=right_state.error_code,
                 baseline_offset_rad_left=self.controller_left.baseline_offset_rad,
                 baseline_offset_rad_right=self.controller_right.baseline_offset_rad,
             )
@@ -925,6 +945,45 @@ class Exosuit:
         if previous is None:
             return nominal
         return min(now - previous, TensionConfig.max_time_step_periods * nominal)
+
+    def _read_motor_state(self, motor) -> MotorTelemetry:
+        """Return what the motor reports, in this package's units.
+
+        Read from the transport's feedback cache rather than by requesting it:
+        a request is a blocking round trip whose frame also re-enters MIT mode
+        (see _read_torque), and every MIT command already draws a feedback
+        frame, so while a motor is driven its telemetry is in hand.
+
+        Recording this is what turns "the motors did not move" into an
+        observation. Until now every motor column held NaN, so a session could
+        show a healthy command stream and say nothing at all about whether the
+        motor accepted it, produced torque, or reported a fault.
+
+        Units follow the rest of this package rather than the wire: position
+        and velocity in radians, torque in N*m. On the MIT path the transport
+        decodes its ``current_amps`` field against the profile's torque range,
+        so it is a torque despite the name.
+
+        :param motor: The motor to read.
+        :return: Its reported state, all NaN if nothing could be read.
+        :rtype: MotorTelemetry
+        """
+        feedback = getattr(motor, "_last_feedback", None)
+        if feedback is None:
+            return MotorTelemetry(math.nan, math.nan, math.nan, math.nan)
+
+        erpm_to_rad_s = getattr(motor, "_erpm_to_rad_s", None)
+        speed = float(getattr(feedback, "speed_erpm", math.nan))
+        return MotorTelemetry(
+            position_rad=math.radians(
+                float(getattr(feedback, "position_degrees", math.nan))
+            ),
+            velocity_rad_per_sec=(
+                erpm_to_rad_s(speed) if erpm_to_rad_s is not None else math.nan
+            ),
+            torque_nm=float(getattr(feedback, "current_amps", math.nan)),
+            error_code=float(getattr(feedback, "error_code", math.nan)),
+        )
 
     def _read_torque(self, motor) -> float | None:
         """Return this leg's torque in N*m, preferring feedback already in hand.
