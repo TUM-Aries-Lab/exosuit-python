@@ -45,10 +45,10 @@ class TestCSVWriterReset:
             filtered_signal_right=SensorSignal(
                 timestamp=1.0, angle_rad=0.35, velocity_rad_per_sec=0.45
             ),
-            motor_torque_nm_per_kg_left=1.5,
+            motor_torque_nm_left=1.5,
             motor_speed_rad_per_sec_left=2.0,
             motor_position_rad_left=0.5,
-            motor_torque_nm_per_kg_right=1.6,
+            motor_torque_nm_right=1.6,
             motor_speed_rad_per_sec_right=2.1,
             motor_position_rad_right=0.6,
         )
@@ -81,10 +81,10 @@ class TestCSVWriterAppendData:
                 filtered_signal_right=SensorSignal(
                     timestamp=0.0, angle_rad=0.0, velocity_rad_per_sec=0.0
                 ),
-                motor_torque_nm_per_kg_left=0.0,
+                motor_torque_nm_left=0.0,
                 motor_speed_rad_per_sec_left=0.0,
                 motor_position_rad_left=0.0,
-                motor_torque_nm_per_kg_right=0.0,
+                motor_torque_nm_right=0.0,
                 motor_speed_rad_per_sec_right=0.0,
                 motor_position_rad_right=0.0,
             ),
@@ -103,10 +103,10 @@ class TestCSVWriterAppendData:
                 filtered_signal_right=SensorSignal(
                     timestamp=1.5, angle_rad=0.35, velocity_rad_per_sec=0.45
                 ),
-                motor_torque_nm_per_kg_left=1.5,
+                motor_torque_nm_left=1.5,
                 motor_speed_rad_per_sec_left=2.0,
                 motor_position_rad_left=0.5,
-                motor_torque_nm_per_kg_right=1.6,
+                motor_torque_nm_right=1.6,
                 motor_speed_rad_per_sec_right=2.1,
                 motor_position_rad_right=0.6,
             ),
@@ -125,10 +125,10 @@ class TestCSVWriterAppendData:
                 filtered_signal_right=SensorSignal(
                     timestamp=1000.5, angle_rad=1.73, velocity_rad_per_sec=3.46
                 ),
-                motor_torque_nm_per_kg_left=100.0,
+                motor_torque_nm_left=100.0,
                 motor_speed_rad_per_sec_left=200.0,
                 motor_position_rad_left=50.0,
-                motor_torque_nm_per_kg_right=101.0,
+                motor_torque_nm_right=101.0,
                 motor_speed_rad_per_sec_right=201.0,
                 motor_position_rad_right=51.0,
             ),
@@ -147,10 +147,10 @@ class TestCSVWriterAppendData:
                 filtered_signal_right=SensorSignal(
                     timestamp=2.0, angle_rad=-0.15, velocity_rad_per_sec=-0.25
                 ),
-                motor_torque_nm_per_kg_left=-2.0,
+                motor_torque_nm_left=-2.0,
                 motor_speed_rad_per_sec_left=-3.0,
                 motor_position_rad_left=-1.0,
-                motor_torque_nm_per_kg_right=-2.1,
+                motor_torque_nm_right=-2.1,
                 motor_speed_rad_per_sec_right=-3.1,
                 motor_position_rad_right=-1.1,
             ),
@@ -169,10 +169,10 @@ class TestCSVWriterAppendData:
                 filtered_signal_right=SensorSignal(
                     timestamp=5.5, angle_rad=-0.12, velocity_rad_per_sec=5.1
                 ),
-                motor_torque_nm_per_kg_left=2.3,
+                motor_torque_nm_left=2.3,
                 motor_speed_rad_per_sec_left=-1.0,
                 motor_position_rad_left=0.0,
-                motor_torque_nm_per_kg_right=2.4,
+                motor_torque_nm_right=2.4,
                 motor_speed_rad_per_sec_right=1.0,
                 motor_position_rad_right=3.3,
             ),
@@ -191,10 +191,10 @@ class TestCSVWriterAppendData:
                 filtered_signal_right=SensorSignal(
                     timestamp=0.001, angle_rad=0.00035, velocity_rad_per_sec=0.00045
                 ),
-                motor_torque_nm_per_kg_left=0.0015,
+                motor_torque_nm_left=0.0015,
                 motor_speed_rad_per_sec_left=0.002,
                 motor_position_rad_left=0.0005,
-                motor_torque_nm_per_kg_right=0.0016,
+                motor_torque_nm_right=0.0016,
                 motor_speed_rad_per_sec_right=0.0021,
                 motor_position_rad_right=0.0006,
             ),
@@ -241,8 +241,8 @@ class TestCSVWriterAppendData:
             == record_data.filtered_signal_right.velocity_rad_per_sec
         )
         assert (
-            row[RecordDataColumnNames.MOTOR_TORQUE_NM_PER_KG_LEFT.value]
-            == record_data.motor_torque_nm_per_kg_left
+            row[RecordDataColumnNames.MOTOR_TORQUE_NM_LEFT.value]
+            == record_data.motor_torque_nm_left
         )
         assert (
             row[RecordDataColumnNames.MOTOR_SPEED_RAD_PER_SEC_LEFT.value]
@@ -253,8 +253,8 @@ class TestCSVWriterAppendData:
             == record_data.motor_position_rad_left
         )
         assert (
-            row[RecordDataColumnNames.MOTOR_TORQUE_NM_PER_KG_RIGHT.value]
-            == record_data.motor_torque_nm_per_kg_right
+            row[RecordDataColumnNames.MOTOR_TORQUE_NM_RIGHT.value]
+            == record_data.motor_torque_nm_right
         )
         assert (
             row[RecordDataColumnNames.MOTOR_SPEED_RAD_PER_SEC_RIGHT.value]
@@ -289,10 +289,10 @@ class TestCSVWriterAppendData:
                     angle_rad=0.35 * i,
                     velocity_rad_per_sec=0.45 * i,
                 ),
-                motor_torque_nm_per_kg_left=1.5 * i,
+                motor_torque_nm_left=1.5 * i,
                 motor_speed_rad_per_sec_left=2.0 * i,
                 motor_position_rad_left=0.5 * i,
-                motor_torque_nm_per_kg_right=1.6 * i,
+                motor_torque_nm_right=1.6 * i,
                 motor_speed_rad_per_sec_right=2.1 * i,
                 motor_position_rad_right=0.6 * i,
             )
@@ -329,10 +329,10 @@ class TestCSVWriterSaveData:
                 filtered_signal_right=SensorSignal(
                     timestamp=1.0, angle_rad=0.35, velocity_rad_per_sec=0.45
                 ),
-                motor_torque_nm_per_kg_left=1.5,
+                motor_torque_nm_left=1.5,
                 motor_speed_rad_per_sec_left=2.0,
                 motor_position_rad_left=0.5,
-                motor_torque_nm_per_kg_right=1.6,
+                motor_torque_nm_right=1.6,
                 motor_speed_rad_per_sec_right=2.1,
                 motor_position_rad_right=0.6,
             ),
@@ -350,10 +350,10 @@ class TestCSVWriterSaveData:
                 filtered_signal_right=SensorSignal(
                     timestamp=2.5, angle_rad=-0.15, velocity_rad_per_sec=-0.25
                 ),
-                motor_torque_nm_per_kg_left=-2.0,
+                motor_torque_nm_left=-2.0,
                 motor_speed_rad_per_sec_left=-3.0,
                 motor_position_rad_left=-1.0,
-                motor_torque_nm_per_kg_right=-2.1,
+                motor_torque_nm_right=-2.1,
                 motor_speed_rad_per_sec_right=-3.1,
                 motor_position_rad_right=-1.1,
             ),
@@ -401,10 +401,10 @@ class TestCSVWriterSaveData:
                     angle_rad=0.35 * i,
                     velocity_rad_per_sec=0.45 * i,
                 ),
-                motor_torque_nm_per_kg_left=1.5 * i,
+                motor_torque_nm_left=1.5 * i,
                 motor_speed_rad_per_sec_left=2.0 * i,
                 motor_position_rad_left=0.5 * i,
-                motor_torque_nm_per_kg_right=1.6 * i,
+                motor_torque_nm_right=1.6 * i,
                 motor_speed_rad_per_sec_right=2.1 * i,
                 motor_position_rad_right=0.6 * i,
             )
@@ -432,10 +432,10 @@ class TestCSVWriterSaveData:
             filtered_signal_right=SensorSignal(
                 timestamp=1.0, angle_rad=0.35, velocity_rad_per_sec=0.45
             ),
-            motor_torque_nm_per_kg_left=1.5,
+            motor_torque_nm_left=1.5,
             motor_speed_rad_per_sec_left=2.0,
             motor_position_rad_left=0.5,
-            motor_torque_nm_per_kg_right=1.6,
+            motor_torque_nm_right=1.6,
             motor_speed_rad_per_sec_right=2.1,
             motor_position_rad_right=0.6,
         )
@@ -467,10 +467,10 @@ class TestCSVWriterSaveData:
                 filtered_signal_right=SensorSignal(
                     timestamp=float(i), angle_rad=0.35, velocity_rad_per_sec=0.45
                 ),
-                motor_torque_nm_per_kg_left=1.5,
+                motor_torque_nm_left=1.5,
                 motor_speed_rad_per_sec_left=2.0,
                 motor_position_rad_left=0.5,
-                motor_torque_nm_per_kg_right=1.6,
+                motor_torque_nm_right=1.6,
                 motor_speed_rad_per_sec_right=2.1,
                 motor_position_rad_right=0.6,
             )
@@ -500,10 +500,10 @@ class TestSessionColumns:
             "filtered_signal_left": signal,
             "raw_signal_right": signal,
             "filtered_signal_right": signal,
-            "motor_torque_nm_per_kg_left": 0.0,
+            "motor_torque_nm_left": 0.0,
             "motor_speed_rad_per_sec_left": 0.0,
             "motor_position_rad_left": 0.0,
-            "motor_torque_nm_per_kg_right": 0.0,
+            "motor_torque_nm_right": 0.0,
             "motor_speed_rad_per_sec_right": 0.0,
             "motor_position_rad_right": 0.0,
             "motor_command_left": -1.25,
