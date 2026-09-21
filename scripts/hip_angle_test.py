@@ -23,9 +23,15 @@ from imu_python.factory import IMUFactory
 from loguru import logger
 
 from exosuit_python.definitions import IMUConfig
+from exosuit_python.utils import setup_logger
 
 # Slow enough to read while holding a pose, fast enough to watch it settle.
 POLL_INTERVAL = 0.25
+
+# The Madgwick fusion starts from an arbitrary orientation and needs a few
+# seconds of samples to settle against gravity. Zeroing before it has is how
+# a static test ends up measuring the filter's transient.
+WARMUP_SECONDS = 3.0
 
 #: Poses worth checking, as (label, expected change from standing in degrees).
 REFERENCE_POSES = (("thigh horizontal", 90.0), ("half of that", 45.0))
@@ -73,9 +79,38 @@ def read_angle(manager) -> float:
 
 def main() -> None:
     """Print both hip angles until interrupted, zeroing on a keypress."""
+    # INFO, or imu_python's per-read DEBUG line drowns the reading this exists
+    # to show.
+    setup_logger(log_level="INFO", stderr_level="INFO")
+
     left, right = detect_legs(IMUConfig())
     if left is None or right is None:
         logger.error(f"Could not match both legs. Left: {left} Right: {right}")
+        return
+
+    # Detection only builds the managers. Nothing reads the sensor until it is
+    # started, and an unstarted manager answers get_data() with None, which
+    # becomes a NaN angle rather than an error.
+    left.start()
+    right.start()
+    try:
+        _run(left, right)
+    finally:
+        left.stop()
+        right.stop()
+
+
+def _run(left, right) -> None:
+    """Warm up, zero on a keypress, then print until interrupted.
+
+    :param left: The left limb's started IMU manager.
+    :param right: The right limb's started IMU manager.
+    :return: None
+    """
+    logger.info(f"Settling the fusion for {WARMUP_SECONDS:.0f} s. Stand still.")
+    time.sleep(WARMUP_SECONDS)
+    if math.isnan(read_angle(left)) or math.isnan(read_angle(right)):
+        logger.error("Still no data from one of the IMUs. Nothing to measure.")
         return
 
     logger.info("Stand upright, then press Enter to zero.")
