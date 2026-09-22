@@ -17,6 +17,7 @@ from hip_controller.control.app import WalkOnController
 from hip_controller.definitions import BasicConfig, SensorSignal
 from imu_python.factory import IMUFactory
 from imu_python.sensor_manager import IMUManager
+from motor_python.can_utils import ensure_can_interface
 from motor_python.cube_mars_motor_can import CubeMarsAK806v2CAN
 
 from exosuit_python.csv_writer import CSVWriter, RecordData
@@ -199,6 +200,18 @@ class Exosuit:
             self.motor_left = MockMotor()
             self.motor_right = MockMotor()
         else:
+            # Before the motors exist, because constructing them opens the bus:
+            # a CAN interface that is down produces "Motor not responding",
+            # which reads as a wiring fault and is one command away from fixed.
+            # Idempotent -- an interface already up at the right bitrate is left
+            # alone, since bringing a working link down and up can drop a motor
+            # into BUS-OFF.
+            #
+            # A failure is logged, not raised: _initialize_motors reports the
+            # real state of the link a moment later, and a suit that cannot
+            # reach its motors should say so once, in its own words.
+            ensure_can_interface()
+
             # AK80-6 over CAN. The MIT force-control protocol is what makes
             # pre-tensioning possible at all: its feedback frame carries the
             # torque the tensioning chart thresholds on. The UART servo path
