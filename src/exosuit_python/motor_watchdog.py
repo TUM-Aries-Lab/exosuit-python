@@ -97,6 +97,12 @@ class MotorDropoutWatchdog:
         :return: What the caller should do about this leg.
         :rtype: WatchdogVerdict
         """
+        if not self._config.enabled:
+            # Fully inert, including the give-up latch: switching it off must
+            # hand the leg straight back to the loop, not leave it written off
+            # by a verdict reached before the switch was thrown.
+            return WatchdogVerdict.HEALTHY
+
         if self._given_up:
             return WatchdogVerdict.GIVE_UP
 
@@ -111,10 +117,21 @@ class MotorDropoutWatchdog:
         self._torque_sum += abs(torque_nm)
         if self._suspect_ticks < self._config.ticks_before_fault:
             return WatchdogVerdict.HEALTHY
+        return self._verdict_on_a_full_stretch()
 
+    def _verdict_on_a_full_stretch(self) -> WatchdogVerdict:
+        """Decide what a completed stretch of suspect ticks means.
+
+        Reached only once the motor has looked commanded-but-inert for the
+        whole window, so the counters are cleared here whatever the answer.
+
+        :return: What the caller should do about this leg.
+        :rtype: WatchdogVerdict
+        """
         mean_torque = self._torque_sum / self._suspect_ticks
         self._suspect_ticks = 0
         self._torque_sum = 0.0
+
         if mean_torque >= self._config.max_mean_torque_nm:
             # Being held, not dropped out. A re-enable would not help, and the
             # loop is already commanding into it; leave it to the operator.
