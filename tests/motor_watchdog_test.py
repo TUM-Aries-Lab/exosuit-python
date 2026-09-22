@@ -5,6 +5,8 @@ stopped at t=8.84 s and was commanded for another 16 seconds without anyone
 noticing.
 """
 
+from dataclasses import replace
+
 from exosuit_python.definitions import MotorWatchdogConfig
 from exosuit_python.motor_watchdog import MotorDropoutWatchdog, WatchdogVerdict
 
@@ -117,3 +119,35 @@ def test_reset_gives_the_leg_another_session():
 
     assert watchdog.recovery_attempts == 0
     assert watchdog.step(**DRIVING) is WatchdogVerdict.HEALTHY
+
+
+def test_it_is_on_by_default():
+    """The flag ships enabled, so a run gets the protection without asking."""
+    assert CONFIG.enabled is True
+
+
+def test_switching_it_off_makes_it_inert():
+    """Disabled, it must never intervene however dead the motor looks."""
+    watchdog = MotorDropoutWatchdog(replace(CONFIG, enabled=False))
+
+    verdicts = _feed(watchdog, CONFIG.ticks_before_fault * 10, **DEAD)
+
+    assert set(verdicts) == {WatchdogVerdict.HEALTHY}
+    assert watchdog.recovery_attempts == 0
+
+
+def test_switching_it_off_releases_a_leg_it_had_written_off():
+    """The give-up latch must not outlive the switch.
+
+    Otherwise turning the watchdog off to rule it out would leave the leg it
+    had already condemned still uncommanded, and look like the watchdog was
+    not the problem.
+    """
+    watchdog = MotorDropoutWatchdog()
+    for _ in range(CONFIG.max_recovery_attempts + 1):
+        _feed(watchdog, CONFIG.ticks_before_fault, **DEAD)
+    assert watchdog.step(**DEAD) is WatchdogVerdict.GIVE_UP
+
+    watchdog._config = replace(CONFIG, enabled=False)
+
+    assert watchdog.step(**DEAD) is WatchdogVerdict.HEALTHY

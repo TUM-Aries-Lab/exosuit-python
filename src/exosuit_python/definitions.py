@@ -267,6 +267,17 @@ class MotorWatchdogConfig:
     ============================  ==============  ================
     """
 
+    # The master switch. On, the watchdog observes every tick and intervenes
+    # only when a motor is plainly not answering; a healthy run never notices
+    # it. Off, it is inert: no detection, no re-enable, and the command reaches
+    # the motor exactly as the position loop produced it.
+    #
+    # It is a flag rather than a deletion because the behaviour it guards
+    # against is rare and its trigger is tuned against a single recording. If
+    # it ever fires on a leg that was working, turning this off separates the
+    # watchdog from whatever else is happening, without unpicking the wiring.
+    enabled: bool = True
+
     # A command the motor should visibly answer. Below this, a motor correctly
     # holding still is indistinguishable from one that has stopped listening.
     min_command_rad_per_sec: float = 5.0
