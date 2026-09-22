@@ -246,6 +246,34 @@ class MotorCommandConfig:
 
 
 @dataclass(frozen=True)
+class CanConfig:
+    """The CAN interface the motors are on, and how to raise it.
+
+    Values match motor-module's ``setup_can.sh``, which is what has been run by
+    hand until now. Keeping them identical matters: an interface raised with
+    different settings than the bus was tested with is a subtler fault than one
+    that is simply down.
+    """
+
+    interface: str = "can0"
+
+    # 1 Mbps, as the CubeMars motors are configured for.
+    bitrate: int = 1_000_000
+
+    # Milliseconds before the controller restarts itself out of BUS-OFF. An
+    # unacknowledged frame is enough to put it there, and without this it stays
+    # silent for good rather than recovering.
+    restart_ms: int = 100
+
+    # The default of 10 is too shallow for a 100 Hz loop driving two motors.
+    tx_queue_length: int = 1000
+
+    # Per command. Generous for `ip`, which returns immediately, and short
+    # enough that a host which cannot run it does not stall startup.
+    command_timeout_s: float = 5.0
+
+
+@dataclass(frozen=True)
 class MotorWatchdogConfig:
     """Thresholds for spotting a motor that has dropped out of MIT mode.
 
