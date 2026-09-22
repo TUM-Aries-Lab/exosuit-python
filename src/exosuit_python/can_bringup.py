@@ -164,7 +164,8 @@ def _bring_up(config: CanConfig) -> bool:
             detail = (result.stderr or result.stdout).strip() if result else "not run"
             logger.error(
                 f"Could not bring up '{config.interface}': '{detail}'. "
-                f"Run setup_can.sh with sudo, or allow passwordless sudo for 'ip'."
+                f"Run scripts/allow_can_bringup_without_password.sh once to fix "
+                f"this permanently, or setup_can.sh with sudo for just this boot."
             )
             return False
 
