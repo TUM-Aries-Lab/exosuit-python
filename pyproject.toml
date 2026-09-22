@@ -40,6 +40,18 @@ hw = [
 no_hw = [
 ]
 
+[tool.pytest.ini_options]
+# Without this, pytest walks the whole repository and its default patterns
+# ("test_*.py" and "*_test.py") pull in bench scripts that merely end the same
+# way -- scripts/hip_angle_test.py is collected as a test module, imported for
+# its non-existent tests, and on a machine without the Linux-only hardware
+# dependencies it fails collection outright.
+#
+# Naming the scripts differently would work until the next one, and the repo's
+# own pre-commit hook wants test files to end in _test.py, so the directory is
+# the honest boundary.
+testpaths = ["tests"]
+
 [tool.ruff]
 line-length = 88
 fix = true
